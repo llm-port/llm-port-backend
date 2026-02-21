@@ -80,6 +80,56 @@ class DockerService:
         c = await self.client.containers.get(container_id)
         await c.unpause()
 
+    async def create_container(
+        self,
+        image: str,
+        name: str | None = None,
+        cmd: list[str] | None = None,
+        env: list[str] | None = None,
+        ports: dict[str, list[dict[str, str]]] | None = None,
+        volumes: list[str] | None = None,
+        network: str | None = None,
+        auto_start: bool = False,
+    ) -> dict[str, Any]:
+        """
+        Create (and optionally start) a container.
+
+        :param image: Image name, e.g. ``nginx:latest``.
+        :param name: Optional container name.
+        :param cmd: Override command, e.g. ``["/bin/sh", "-c", "sleep 100"]``.
+        :param env: Environment variables, e.g. ``["KEY=value", "FOO=bar"]``.
+        :param ports: Port bindings in Docker format, e.g.
+            ``{"80/tcp": [{"HostIp": "", "HostPort": "8080"}]}``.
+        :param volumes: Host-path binds, e.g. ``["/host/path:/container/path"]``.
+        :param network: Name/ID of network to attach on creation.
+        :param auto_start: If ``True``, start the container immediately.
+        :return: Container inspect dict.
+        """
+        config: dict[str, Any] = {"Image": image}
+        if cmd:
+            config["Cmd"] = cmd
+        if env:
+            config["Env"] = env
+        host_config: dict[str, Any] = {}
+        if ports:
+            host_config["PortBindings"] = ports
+            config["ExposedPorts"] = {p: {} for p in ports}
+        if volumes:
+            host_config["Binds"] = volumes
+        if network:
+            host_config["NetworkMode"] = network
+        config["HostConfig"] = host_config
+
+        create_kwargs: dict[str, Any] = {"config": config}
+        if name:
+            create_kwargs["name"] = name
+
+        c = await self.client.containers.create(**create_kwargs)
+        if auto_start:
+            await c.start()
+        await c.show()
+        return dict(c._container)  # noqa: SLF001
+
     async def delete(self, container_id: str, force: bool = False) -> None:
         """Delete a container."""
         c = await self.client.containers.get(container_id)

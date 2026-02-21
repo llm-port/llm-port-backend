@@ -22,6 +22,7 @@ from airgap_backend.services.policy.enforcement import Action, PolicyEnforcer
 from airgap_backend.web.api.admin.containers.schema import (
     ContainerDetailDTO,
     ContainerSummaryDTO,
+    CreateContainerRequest,
     ExecTokenDTO,
     ExecTokenRequest,
     RegisterContainerRequest,
@@ -111,6 +112,69 @@ def _container_summary_from_docker(
 # ──────────────────────────────────────────────────────────────────────────────
 # Routes
 # ──────────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/", response_model=ContainerSummaryDTO, status_code=201, name="create_container")
+async def create_container(
+    body: CreateContainerRequest,
+    user: User = Depends(require_superuser),
+    docker: DockerService = Depends(get_docker),
+    registry_dao: ContainerRegistryDAO = Depends(),
+    audit_dao: AuditDAO = Depends(),
+) -> ContainerSummaryDTO:
+    """Create a new container and register it in the classification registry."""
+    # Build Docker port binding config: {"80/tcp": [{"HostIp": "", "HostPort": "8080"}]}
+    port_bindings: dict[str, list[dict[str, str]]] | None = None
+    if body.ports:
+        port_bindings = {}
+        for pb in body.ports:
+            port_bindings.setdefault(pb.container_port, []).append(
+                {"HostIp": "", "HostPort": pb.host_port}
+            )
+
+    raw = await docker.create_container(
+        image=body.image,
+        name=body.name or None,
+        cmd=body.cmd or None,
+        env=body.env or None,
+        ports=port_bindings,
+        volumes=body.volumes or None,
+        network=body.network or None,
+        auto_start=body.auto_start,
+    )
+
+    container_id: str = raw.get("Id", "")
+    # Determine the name Docker assigned
+    raw_name = (body.name or container_id[:12]).lstrip("/")
+
+    entry = await registry_dao.upsert(
+        container_id=container_id,
+        name=raw_name,
+        container_class=body.container_class,
+        owner_scope=body.owner_scope,
+        policy=body.policy,
+        created_by=user.id,
+    )
+
+    await audit_action(
+        action="container.create",
+        target_type="container",
+        target_id=container_id,
+        result=AuditResult.ALLOW,
+        actor_id=user.id,
+        severity="normal",
+        audit_dao=audit_dao,
+        metadata_json=json.dumps(
+            {
+                "image": body.image,
+                "name": raw_name,
+                "class": body.container_class.value,
+                "policy": body.policy.value,
+            }
+        ),
+    )
+
+    return _container_summary_from_docker(raw, entry.container_class, entry.policy, entry.owner_scope)
 
 
 @router.get("/", response_model=list[ContainerSummaryDTO], name="list_containers")

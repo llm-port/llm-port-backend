@@ -60,3 +60,26 @@ class RegisterContainerRequest(BaseModel):
     container_class: ContainerClass = ContainerClass.TENANT_APP
     owner_scope: str = "platform"
     policy: ContainerPolicy = ContainerPolicy.FREE
+
+
+class PortBinding(BaseModel):
+    """A single host→container port mapping."""
+
+    host_port: str = Field(..., description="Host port, e.g. '8080'.")
+    container_port: str = Field(..., description="Container port/protocol, e.g. '80/tcp'.")
+
+
+class CreateContainerRequest(BaseModel):
+    """Request body for creating a new container."""
+
+    image: str = Field(..., description="Image name:tag, e.g. 'nginx:latest'.")
+    name: str | None = Field(None, description="Optional container name.")
+    container_class: ContainerClass = ContainerClass.UNTRUSTED
+    owner_scope: str = "platform"
+    policy: ContainerPolicy = ContainerPolicy.FREE
+    auto_start: bool = False
+    ports: list[PortBinding] = Field(default_factory=list)
+    env: list[str] = Field(default_factory=list, description="KEY=VALUE strings.")
+    cmd: list[str] | None = Field(None, description="Command override.")
+    network: str | None = None
+    volumes: list[str] = Field(default_factory=list, description="'/host:/container' strings.")
