@@ -10,6 +10,7 @@ from fastapi_users.authentication import (
     JWTStrategy,
 )
 from fastapi_users.db import SQLAlchemyBaseUserTableUUID, SQLAlchemyUserDatabase
+from pydantic import ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from airgap_backend.db.base import Base
@@ -23,6 +24,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
 class UserRead(schemas.BaseUser[uuid.UUID]):
     """Represents a read command for a user."""
+
+    email: str
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserCreate(schemas.BaseUserCreate):

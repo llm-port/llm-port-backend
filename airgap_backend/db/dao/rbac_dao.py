@@ -115,6 +115,13 @@ class RbacDAO:
             ),
         )
 
+    async def set_user_roles(self, user_id: uuid.UUID, role_ids: list[uuid.UUID]) -> None:
+        """Replace all role assignments for a user."""
+        unique_role_ids = list(dict.fromkeys(role_ids))
+        await self.session.execute(delete(UserRole).where(UserRole.user_id == user_id))
+        for role_id in unique_role_ids:
+            self.session.add(UserRole(user_id=user_id, role_id=role_id))
+
     # ------------------------------------------------------------------
     # Permission checks
     # ------------------------------------------------------------------
