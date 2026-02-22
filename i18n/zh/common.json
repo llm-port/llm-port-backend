@@ -20,6 +20,8 @@
     "models": "模型",
     "runtimes": "运行时",
     "jobs": "任务",
+    "agent_trace": "代理追踪",
+    "endpoint": "端点",
     "logs": "日志",
     "settings": "设置"
   },
@@ -423,5 +425,28 @@
     "failed": "失败",
     "canceled": "已取消",
     "search_placeholder": "搜索任务..."
+  },
+  "llm_graph": {
+    "title": "代理追踪",
+    "topology_mode": "拓扑",
+    "live_mode": "实时 Trace",
+    "search": "搜索",
+    "status_filter": "状态",
+    "pause_stream": "暂停流",
+    "resume_stream": "恢复流",
+    "nodes": "节点",
+    "edges": "边",
+    "node_details": "节点详情",
+    "select_node": "选择一个节点查看元数据。",
+    "type": "类型",
+    "failed_load": "加载图拓扑失败。",
+    "failed_load_traces": "加载 Trace 事件失败。"
+  },
+  "agents_api_docs": {
+    "title": "端点",
+    "endpoint_url": "端点 URL",
+    "load": "加载",
+    "open_new_tab": "新标签打开",
+    "note": "如果嵌入失败，请检查目标 docs 端点的 X-Frame-Options/CSP。"
   }
 }

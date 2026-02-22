@@ -20,6 +20,8 @@
     "models": "Modelos",
     "runtimes": "Runtimes",
     "jobs": "Trabajos",
+    "agent_trace": "Traza de Agente",
+    "endpoint": "Punto de Acceso",
     "logs": "Logs",
     "settings": "Configuracion"
   },
@@ -423,5 +425,28 @@
     "failed": "Failed",
     "canceled": "Canceled",
     "search_placeholder": "Search jobs..."
+  },
+  "llm_graph": {
+    "title": "Traza de Agente",
+    "topology_mode": "Topologia",
+    "live_mode": "Trazas en vivo",
+    "search": "Buscar",
+    "status_filter": "Estado",
+    "pause_stream": "Pausar stream",
+    "resume_stream": "Reanudar stream",
+    "nodes": "Nodos",
+    "edges": "Aristas",
+    "node_details": "Detalles del nodo",
+    "select_node": "Selecciona un nodo para ver metadatos.",
+    "type": "Tipo",
+    "failed_load": "No se pudo cargar la topologia del grafo.",
+    "failed_load_traces": "No se pudieron cargar los eventos de trazas."
+  },
+  "agents_api_docs": {
+    "title": "Punto de Acceso",
+    "endpoint_url": "URL del Endpoint",
+    "load": "Cargar",
+    "open_new_tab": "Abrir en nueva pestana",
+    "note": "Si falla el embed, revisa X-Frame-Options/CSP en el endpoint de docs."
   }
 }

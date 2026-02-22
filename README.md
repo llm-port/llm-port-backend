@@ -117,6 +117,25 @@ The frontend should never call Loki directly. All log traffic flows through this
 
 All `/api/logs/*` endpoints require RBAC permission `logs:read` (superusers bypass checks).
 
+## LLM Graph API
+
+The backend now exposes graph data for the admin React Flow visualizer:
+
+- `GET /api/llm/graph/topology`
+- `GET /api/llm/graph/traces`
+- `GET /api/llm/graph/traces/stream` (SSE)
+
+All endpoints require RBAC permission `llm.graph:read` (superusers bypass checks).
+
+The traces endpoints read from the gateway (`llm_port_api`) request log DB:
+
+- `LLM_PORT_BACKEND_LLM_GRAPH_DB_HOST`
+- `LLM_PORT_BACKEND_LLM_GRAPH_DB_PORT`
+- `LLM_PORT_BACKEND_LLM_GRAPH_DB_USER`
+- `LLM_PORT_BACKEND_LLM_GRAPH_DB_PASS`
+- `LLM_PORT_BACKEND_LLM_GRAPH_DB_BASE`
+- `LLM_PORT_BACKEND_LLM_GRAPH_DB_URL_OVERRIDE` (optional full DSN override)
+
 ## I18n API (runtime translation bundles)
 
 The frontend loads translations at runtime from backend endpoints:

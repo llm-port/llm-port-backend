@@ -20,6 +20,8 @@
     "models": "Models",
     "runtimes": "Runtimes",
     "jobs": "Jobs",
+    "agent_trace": "Agent Trace",
+    "endpoint": "Endpoint",
     "logs": "Logs",
     "settings": "Settings"
   },
@@ -418,6 +420,29 @@
     "failed": "Failed",
     "canceled": "Canceled",
     "search_placeholder": "Search jobs..."
+  },
+  "llm_graph": {
+    "title": "Agent Trace",
+    "topology_mode": "Topology",
+    "live_mode": "Live Traces",
+    "search": "Search",
+    "status_filter": "Status",
+    "pause_stream": "Pause Stream",
+    "resume_stream": "Resume Stream",
+    "nodes": "Nodes",
+    "edges": "Edges",
+    "node_details": "Node Details",
+    "select_node": "Select a node to inspect metadata.",
+    "type": "Type",
+    "failed_load": "Failed to load graph topology.",
+    "failed_load_traces": "Failed to load graph trace events."
+  },
+  "agents_api_docs": {
+    "title": "Endpoint",
+    "endpoint_url": "Endpoint URL",
+    "load": "Load",
+    "open_new_tab": "Open in new tab",
+    "note": "If embedding fails, check X-Frame-Options/CSP on the target docs endpoint."
   },
   "errors": {
     "oops": "Oops!",

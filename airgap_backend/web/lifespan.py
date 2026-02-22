@@ -54,6 +54,12 @@ def _setup_db(app: FastAPI) -> None:  # pragma: no cover
     )
     app.state.db_engine = engine
     app.state.db_session_factory = session_factory
+    graph_engine = create_async_engine(str(settings.llm_graph_db_url), echo=False)
+    app.state.llm_graph_trace_engine = graph_engine
+    app.state.llm_graph_trace_session_factory = async_sessionmaker(
+        graph_engine,
+        expire_on_commit=False,
+    )
 
 
 def setup_opentelemetry(app: FastAPI) -> None:  # pragma: no cover
@@ -190,6 +196,8 @@ async def lifespan_setup(
     if not broker.is_worker_process:
         await broker.shutdown()
     await app.state.db_engine.dispose()
+    if hasattr(app.state, "llm_graph_trace_engine"):
+        await app.state.llm_graph_trace_engine.dispose()
 
     await shutdown_rabbit(app)
     stop_opentelemetry(app)

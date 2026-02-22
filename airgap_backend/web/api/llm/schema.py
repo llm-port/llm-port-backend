@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,7 +17,6 @@ from airgap_backend.db.models.llm import (
     ProviderType,
     RuntimeStatus,
 )
-
 
 # -----------------------------------------------------------------------
 # Provider
@@ -192,3 +192,62 @@ class HFTokenSetRequest(BaseModel):
     """Request body for setting the HF token."""
 
     token: str = Field(..., min_length=1)
+
+
+# -----------------------------------------------------------------------
+# Graph
+# -----------------------------------------------------------------------
+
+
+class GraphNodeDTO(BaseModel):
+    """Graph node used by the LLM visualizer."""
+
+    id: str
+    type: str
+    label: str
+    status: str | None = None
+    meta: dict[str, Any] | None = None
+
+
+class GraphEdgeDTO(BaseModel):
+    """Graph edge used by the LLM visualizer."""
+
+    id: str
+    source: str
+    target: str
+    type: str = "default"
+
+
+class TopologyResponseDTO(BaseModel):
+    """Response for graph topology."""
+
+    generated_at: datetime
+    nodes: list[GraphNodeDTO]
+    edges: list[GraphEdgeDTO]
+
+
+class TraceEventDTO(BaseModel):
+    """Trace event emitted to the graph UI."""
+
+    event_id: int
+    ts: datetime
+    request_id: str
+    trace_id: str | None = None
+    tenant_id: str
+    user_id: str
+    model_alias: str | None = None
+    provider_instance_id: str | None = None
+    status: int
+    latency_ms: int
+    ttft_ms: int | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    total_tokens: int | None = None
+    error_code: str | None = None
+
+
+class TraceSnapshotResponseDTO(BaseModel):
+    """Initial graph trace snapshot."""
+
+    items: list[TraceEventDTO]
+    next_cursor: str | None = None

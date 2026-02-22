@@ -20,6 +20,8 @@
     "models": "Modelle",
     "runtimes": "Runtimes",
     "jobs": "Jobs",
+    "agent_trace": "Agenten-Trace",
+    "endpoint": "Endpunkt",
     "logs": "Logs",
     "settings": "Einstellungen"
   },
@@ -423,5 +425,28 @@
     "failed": "Fehlgeschlagen",
     "canceled": "Abgebrochen",
     "search_placeholder": "Nach Jobs suchen..."
+  },
+  "llm_graph": {
+    "title": "Agenten-Trace",
+    "topology_mode": "Topologie",
+    "live_mode": "Live Traces",
+    "search": "Suche",
+    "status_filter": "Status",
+    "pause_stream": "Stream pausieren",
+    "resume_stream": "Stream fortsetzen",
+    "nodes": "Knoten",
+    "edges": "Kanten",
+    "node_details": "Knotendetails",
+    "select_node": "Einen Knoten waehlen, um Metadaten zu sehen.",
+    "type": "Typ",
+    "failed_load": "Graph-Topologie konnte nicht geladen werden.",
+    "failed_load_traces": "Graph-Trace-Events konnten nicht geladen werden."
+  },
+  "agents_api_docs": {
+    "title": "Endpunkt",
+    "endpoint_url": "Endpunkt-URL",
+    "load": "Laden",
+    "open_new_tab": "In neuem Tab oeffnen",
+    "note": "Wenn das Einbetten fehlschlaegt, pruefe X-Frame-Options/CSP am Ziel-Endpunkt."
   }
 }

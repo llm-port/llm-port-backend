@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from airgap_backend.web.api.llm.graph import router as graph_router
 from airgap_backend.web.api.llm.jobs import router as jobs_router
 from airgap_backend.web.api.llm.models import router as models_router
 from airgap_backend.web.api.llm.providers import router as providers_router
@@ -16,3 +17,4 @@ llm_router.include_router(runtimes_router, prefix="/runtimes", tags=["llm-runtim
 llm_router.include_router(jobs_router, prefix="/jobs", tags=["llm-jobs"])
 llm_router.include_router(search_router, prefix="/search", tags=["llm-search"])
 llm_router.include_router(settings_router, prefix="/settings", tags=["llm-settings"])
+llm_router.include_router(graph_router, prefix="/graph", tags=["llm-graph"])

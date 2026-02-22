@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     model_store_root: str = "/srv/llm-port/models"
     hf_token: str | None = None
     default_vllm_image: str = "vllm/vllm-openai:latest"
+    llm_graph_db_host: str = "localhost"
+    llm_graph_db_port: int = 5432
+    llm_graph_db_user: str = "llm_user"
+    llm_graph_db_pass: str = "llm_user"  # noqa: S105
+    llm_graph_db_base: str = "llm_api"
+    llm_graph_db_url_override: str | None = None
 
     # Admin dashboard / Grafana embedding settings
     grafana_url: str | None = Field(
@@ -137,6 +143,20 @@ class Settings(BaseSettings):
             user=self.rabbit_user,
             password=self.rabbit_pass,
             path=self.rabbit_vhost,
+        )
+
+    @property
+    def llm_graph_db_url(self) -> URL:
+        """Assemble database URL for gateway trace read model."""
+        if self.llm_graph_db_url_override:
+            return URL(self.llm_graph_db_url_override)
+        return URL.build(
+            scheme="postgresql+asyncpg",
+            host=self.llm_graph_db_host,
+            port=self.llm_graph_db_port,
+            user=self.llm_graph_db_user,
+            password=self.llm_graph_db_pass,
+            path=f"/{self.llm_graph_db_base}",
         )
 
     @property
