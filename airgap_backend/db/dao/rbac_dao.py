@@ -29,6 +29,7 @@ _DEFAULT_ROLES: dict[str, dict[str, list[str]]] = {
         "networks": ["create", "read", "delete"],
         "stacks": ["read", "deploy", "update", "rollback"],
         "audit": ["read"],
+        "logs": ["read"],
         "root_mode": ["start", "stop", "read"],
     },
     "operator": {
@@ -42,6 +43,7 @@ _DEFAULT_ROLES: dict[str, dict[str, list[str]]] = {
         "networks": ["read"],
         "stacks": ["read"],
         "audit": ["read"],
+        "logs": ["read"],
         "root_mode": ["read"],
     },
     "viewer": {
@@ -55,6 +57,7 @@ _DEFAULT_ROLES: dict[str, dict[str, list[str]]] = {
         "networks": ["read"],
         "stacks": ["read"],
         "audit": ["read"],
+        "logs": ["read"],
         "root_mode": ["read"],
     },
 }

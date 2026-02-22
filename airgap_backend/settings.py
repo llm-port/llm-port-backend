@@ -98,6 +98,13 @@ class Settings(BaseSettings):
             "AIRGAP_GRAFANA_PANELS_OVERVIEW",
         ),
     )
+    loki_base_url: str = "http://loki:3100"
+    logs_max_limit: int = 5000
+    logs_default_limit: int = 200
+    logs_allowed_labels_raw: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("AIRGAP_BACKEND_LOGS_ALLOWED_LABELS"),
+    )
 
     @property
     def db_url(self) -> URL:
@@ -130,6 +137,18 @@ class Settings(BaseSettings):
             password=self.rabbit_pass,
             path=self.rabbit_vhost,
         )
+
+    @property
+    def logs_allowed_labels(self) -> set[str] | None:
+        """Parse optional comma-separated allowlist for log labels."""
+        if not self.logs_allowed_labels_raw:
+            return None
+        labels = {
+            chunk.strip().lower()
+            for chunk in self.logs_allowed_labels_raw.split(",")
+            if chunk.strip()
+        }
+        return labels or None
 
     model_config = SettingsConfigDict(
         env_file=(".env", "airgap_backend/.env"),

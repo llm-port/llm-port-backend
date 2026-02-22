@@ -86,9 +86,24 @@ AIRGAP_BACKEND_ENVIRONMENT="dev"
 AIRGAP_GRAFANA_URL="http://localhost:3001"
 AIRGAP_GRAFANA_DASHBOARD_UID_OVERVIEW=""
 AIRGAP_GRAFANA_PANELS_OVERVIEW=""
+AIRGAP_BACKEND_LOKI_BASE_URL="http://loki:3100"
+AIRGAP_BACKEND_LOGS_MAX_LIMIT="5000"
+AIRGAP_BACKEND_LOGS_DEFAULT_LIMIT="200"
+AIRGAP_BACKEND_LOGS_ALLOWED_LABELS="compose_service,container,job,host,level"
 ```
 
 You can read more about BaseSettings class here: https://pydantic-docs.helpmanual.io/usage/settings/
+
+## Logs API (Loki Proxy)
+
+The frontend should never call Loki directly. All log traffic flows through this backend:
+
+- `GET /api/logs/labels`
+- `GET /api/logs/label/{name}/values`
+- `GET /api/logs/query_range`
+- `WebSocket /api/logs/tail?query=...`
+
+All `/api/logs/*` endpoints require RBAC permission `logs:read` (superusers bypass checks).
 ## OpenTelemetry 
 
 If you want to start your project with OpenTelemetry collector 
