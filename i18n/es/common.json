@@ -1,6 +1,7 @@
 {
   "app": {
     "title": "llm-port",
+    "subtitle": "Consola",
     "check_session": "Verificando sesion..."
   },
   "theme": {

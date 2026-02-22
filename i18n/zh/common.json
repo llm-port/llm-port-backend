@@ -1,6 +1,7 @@
 {
   "app": {
     "title": "llm-port",
+    "subtitle": "控制台",
     "check_session": "正在检查会话..."
   },
   "theme": {
