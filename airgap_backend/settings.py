@@ -105,6 +105,7 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("AIRGAP_BACKEND_LOGS_ALLOWED_LABELS"),
     )
+    i18n_dir: str = "i18n"
 
     @property
     def db_url(self) -> URL:
@@ -149,6 +150,14 @@ class Settings(BaseSettings):
             if chunk.strip()
         }
         return labels or None
+
+    @property
+    def i18n_path(self) -> Path:
+        """Resolve translation directory path."""
+        base = Path(self.i18n_dir)
+        if base.is_absolute():
+            return base
+        return Path(__file__).resolve().parent.parent / base
 
     model_config = SettingsConfigDict(
         env_file=(".env", "airgap_backend/.env"),

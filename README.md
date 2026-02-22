@@ -90,6 +90,7 @@ AIRGAP_BACKEND_LOKI_BASE_URL="http://loki:3100"
 AIRGAP_BACKEND_LOGS_MAX_LIMIT="5000"
 AIRGAP_BACKEND_LOGS_DEFAULT_LIMIT="200"
 AIRGAP_BACKEND_LOGS_ALLOWED_LABELS="compose_service,container,job,host,level"
+AIRGAP_BACKEND_I18N_DIR="i18n"
 ```
 
 You can read more about BaseSettings class here: https://pydantic-docs.helpmanual.io/usage/settings/
@@ -104,6 +105,19 @@ The frontend should never call Loki directly. All log traffic flows through this
 - `WebSocket /api/logs/tail?query=...`
 
 All `/api/logs/*` endpoints require RBAC permission `logs:read` (superusers bypass checks).
+
+## I18n API (runtime translation bundles)
+
+The frontend loads translations at runtime from backend endpoints:
+
+- `GET /api/i18n/languages`
+- `GET /api/i18n/{lang}/{namespace}`
+
+By default the backend reads bundles from `airgap_backend/i18n` (configurable via `AIRGAP_BACKEND_I18N_DIR`).
+
+To add a language without frontend recompilation:
+1. Create `airgap_backend/i18n/<lang>/common.json`.
+2. Refresh the frontend; the new language appears in the language selector.
 ## OpenTelemetry 
 
 If you want to start your project with OpenTelemetry collector 
