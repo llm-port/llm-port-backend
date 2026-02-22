@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from collections.abc import AsyncIterator
 from typing import Any
@@ -54,6 +55,31 @@ class DockerService:
         c = await self.client.containers.get(container_id)
         await c.show()
         return dict(c._container)  # noqa: SLF001
+
+    async def container_stats(self, container_id: str) -> dict[str, Any]:
+        """Return a point-in-time stats snapshot for a container."""
+        c = await self.client.containers.get(container_id)
+        stats = await c.stats(stream=False)
+        if isinstance(stats, dict):
+            return stats
+        if isinstance(stats, str):
+            loaded = json.loads(stats)
+            if isinstance(loaded, dict):
+                return loaded
+            if isinstance(loaded, list) and loaded:
+                first = loaded[0]
+                if isinstance(first, dict):
+                    return first
+        if isinstance(stats, list) and stats:
+            first = stats[0]
+            if isinstance(first, dict):
+                return first
+            if isinstance(first, str):
+                loaded = json.loads(first)
+                if isinstance(loaded, dict):
+                    return loaded
+        msg = f"Unsupported stats payload type: {type(stats)!r}"
+        raise TypeError(msg)
 
     async def start(self, container_id: str) -> None:
         """Start a stopped container."""

@@ -83,6 +83,9 @@ An example of .env file:
 AIRGAP_BACKEND_RELOAD="True"
 AIRGAP_BACKEND_PORT="8000"
 AIRGAP_BACKEND_ENVIRONMENT="dev"
+AIRGAP_GRAFANA_URL="http://localhost:3001"
+AIRGAP_GRAFANA_DASHBOARD_UID_OVERVIEW=""
+AIRGAP_GRAFANA_PANELS_OVERVIEW=""
 ```
 
 You can read more about BaseSettings class here: https://pydantic-docs.helpmanual.io/usage/settings/

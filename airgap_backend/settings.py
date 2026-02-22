@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from tempfile import gettempdir
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from yarl import URL
 
@@ -75,6 +76,29 @@ class Settings(BaseSettings):
     hf_token: str | None = None
     default_vllm_image: str = "vllm/vllm-openai:latest"
 
+    # Admin dashboard / Grafana embedding settings
+    grafana_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "AIRGAP_BACKEND_GRAFANA_URL",
+            "AIRGAP_GRAFANA_URL",
+        ),
+    )
+    grafana_dashboard_uid_overview: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "AIRGAP_BACKEND_GRAFANA_DASHBOARD_UID_OVERVIEW",
+            "AIRGAP_GRAFANA_DASHBOARD_UID_OVERVIEW",
+        ),
+    )
+    grafana_panels_overview: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "AIRGAP_BACKEND_GRAFANA_PANELS_OVERVIEW",
+            "AIRGAP_GRAFANA_PANELS_OVERVIEW",
+        ),
+    )
+
     @property
     def db_url(self) -> URL:
         """
@@ -108,7 +132,7 @@ class Settings(BaseSettings):
         )
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "airgap_backend/.env"),
         env_prefix="AIRGAP_BACKEND_",
         env_file_encoding="utf-8",
     )
