@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     llm_graph_db_pass: str = "llm_user"  # noqa: S105
     llm_graph_db_base: str = "llm_api"
     llm_graph_db_url_override: str | None = None
+    rag_base_url: str = "http://localhost:8002/api"
+    rag_service_token: str = "dev-rag-service-token"  # noqa: S105
+    rag_runtime_secret_header_name: str = "x-embedding-api-key"  # noqa: S105
+    rag_timeout_sec: float = 30.0
 
     # Admin dashboard / Grafana embedding settings
     grafana_url: str | None = Field(

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from airgap_backend.db.models.containers import ContainerClass, ContainerPolicy
 
@@ -16,13 +18,18 @@ class ContainerSummaryDTO(BaseModel):
     status: str
     state: str
     created: str
-    ports: list[dict] = Field(default_factory=list)
+    ports: list[dict[str, Any]] = Field(default_factory=list)
     networks: list[str] = Field(default_factory=list)
     container_class: ContainerClass = ContainerClass.UNTRUSTED
     policy: ContainerPolicy = ContainerPolicy.FREE
     owner_scope: str = "unknown"
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("ports", "networks", mode="before")
+    @classmethod
+    def _coerce_nullable_lists(cls, value: Any) -> Any:
+        return [] if value is None else value
 
 
 class ContainerDetailDTO(ContainerSummaryDTO):

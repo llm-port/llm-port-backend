@@ -103,8 +103,13 @@ def _container_summary_from_docker(
 ) -> ContainerSummaryDTO:
     names: list[str] = raw.get("Names", [raw.get("Name", "")])
     name = names[0].lstrip("/") if names else raw.get("Id", "")[:12]
-    ports: list[dict] = raw.get("Ports", [])
-    network_names = list((raw.get("NetworkSettings") or {}).get("Networks", {}).keys())
+    raw_ports = raw.get("Ports")
+    ports: list[dict[str, Any]] = list(raw_ports) if isinstance(raw_ports, list) else []
+    network_settings = raw.get("NetworkSettings") or {}
+    raw_networks = network_settings.get("Networks")
+    if not isinstance(raw_networks, dict):
+        raw_networks = {}
+    network_names = list(raw_networks.keys())
     return ContainerSummaryDTO(
         id=raw.get("Id", ""),
         name=name,
@@ -248,8 +253,15 @@ async def get_container(
     raw_state = raw.get("State", {})
     raw_config = raw.get("Config", {})
     names = [raw.get("Name", "").lstrip("/")]
-    ports = list((raw.get("NetworkSettings") or {}).get("Ports", {}).keys())
-    networks = list((raw.get("NetworkSettings") or {}).get("Networks", {}).keys())
+    network_settings = raw.get("NetworkSettings") or {}
+    raw_port_map = network_settings.get("Ports")
+    if not isinstance(raw_port_map, dict):
+        raw_port_map = {}
+    raw_networks = network_settings.get("Networks")
+    if not isinstance(raw_networks, dict):
+        raw_networks = {}
+    ports = list(raw_port_map.keys())
+    networks = list(raw_networks.keys())
     return ContainerDetailDTO(
         id=raw.get("Id", ""),
         name=names[0] if names else container_id[:12],
