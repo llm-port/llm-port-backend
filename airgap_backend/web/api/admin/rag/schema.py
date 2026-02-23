@@ -59,6 +59,10 @@ class RagSearchFiltersDTO(BaseModel):
     sources: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     doc_types: list[str] = Field(default_factory=list)
+    container_ids: list[str] = Field(default_factory=list)
+    include_descendants: bool = True
+    source_kind: str | None = Field(default=None, max_length=32)
+    asset_ids: list[str] = Field(default_factory=list)
     time_from: datetime | None = None
     time_to: datetime | None = None
 
@@ -120,6 +124,178 @@ class RagAdminRunCollectorResponseDTO(BaseModel):
     status: str
 
 
+class RagContainerPayloadDTO(BaseModel):
+    """Create/update container payload."""
+
+    tenant_id: str = Field(min_length=1, max_length=256)
+    workspace_id: str | None = Field(default=None, max_length=256)
+    parent_id: str | None = None
+    name: str = Field(min_length=1, max_length=256)
+    sort_order: int = 0
+    acl_principals: list[str] = Field(default_factory=list)
+
+
+class RagContainerDTO(BaseModel):
+    """Container DTO."""
+
+    id: str
+    tenant_id: str
+    workspace_id: str | None = None
+    parent_id: str | None = None
+    name: str
+    slug: str
+    path: str
+    depth: int
+    sort_order: int
+    acl_principals: list[str] = Field(default_factory=list)
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class RagContainerTreeResponseDTO(BaseModel):
+    """Container tree response."""
+
+    containers: list[RagContainerDTO]
+
+
+class RagUploadPresignRequestDTO(BaseModel):
+    """Upload presign request."""
+
+    tenant_id: str = Field(min_length=1, max_length=256)
+    workspace_id: str | None = Field(default=None, max_length=256)
+    container_id: str
+    filename: str = Field(min_length=1, max_length=1024)
+    size_bytes: int = Field(ge=1)
+    content_type: str = Field(min_length=1, max_length=256)
+    sha256: str | None = None
+
+
+class RagUploadPresignResponseDTO(BaseModel):
+    """Upload presign response."""
+
+    object_key: str
+    upload_url: str
+    required_headers: dict[str, str] = Field(default_factory=dict)
+    expires_at: datetime
+
+
+class RagUploadCompleteRequestDTO(BaseModel):
+    """Upload complete request."""
+
+    object_key: str
+    tenant_id: str = Field(min_length=1, max_length=256)
+    workspace_id: str | None = Field(default=None, max_length=256)
+    container_id: str
+    filename: str = Field(min_length=1, max_length=1024)
+    size_bytes: int = Field(ge=1)
+    content_type: str = Field(min_length=1, max_length=256)
+    sha256: str = Field(min_length=64, max_length=64)
+    draft_id: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    acl_principals: list[str] = Field(default_factory=list)
+    created_by: str | None = None
+
+
+class RagUploadCompleteResponseDTO(BaseModel):
+    """Upload complete response."""
+
+    draft_id: str
+    operation_id: int
+    status: str
+
+
+class RagDraftCreateRequestDTO(BaseModel):
+    """Create draft request."""
+
+    tenant_id: str = Field(min_length=1, max_length=256)
+    workspace_id: str | None = Field(default=None, max_length=256)
+    container_id: str
+    created_by: str | None = None
+
+
+class RagDraftOperationPayloadDTO(BaseModel):
+    """Draft operation payload."""
+
+    op_type: str = Field(pattern="^(upload|replace|delete|move|retag|set_acl|rename)$")
+    asset_id: str | None = None
+    target_container_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class RagDraftUpdateRequestDTO(BaseModel):
+    """Patch draft request."""
+
+    operations: list[RagDraftOperationPayloadDTO] | None = None
+    status: str | None = Field(default=None, pattern="^(open|saved|published|cancelled)$")
+
+
+class RagDraftOperationDTO(BaseModel):
+    """Draft operation DTO."""
+
+    id: int
+    op_type: str
+    asset_id: str | None = None
+    target_container_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RagDraftDTO(BaseModel):
+    """Draft DTO."""
+
+    id: str
+    tenant_id: str
+    workspace_id: str | None = None
+    container_id: str
+    status: str
+    created_by: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    operations: list[RagDraftOperationDTO] = Field(default_factory=list)
+
+
+class RagPublishTriggerRequestDTO(BaseModel):
+    """Publish trigger request."""
+
+    scheduled_for: datetime | None = None
+    triggered_by: str | None = None
+
+
+class RagPublishTriggerResponseDTO(BaseModel):
+    """Publish trigger response."""
+
+    publish_id: str
+    job_id: str | None = None
+    status: str
+
+
+class RagPublishDTO(BaseModel):
+    """Publish DTO."""
+
+    id: str
+    draft_id: str
+    tenant_id: str
+    workspace_id: str | None = None
+    container_id: str
+    scheduled_for: datetime | None = None
+    status: str
+    triggered_by: str
+    stats: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class RagPublishListResponseDTO(BaseModel):
+    """Publish list response."""
+
+    publishes: list[RagPublishDTO]
+
+
 class RagIngestJobEventDTO(BaseModel):
     """One ingestion event."""
 
@@ -134,6 +310,9 @@ class RagIngestJobDTO(BaseModel):
 
     job_id: str
     collector_id: str
+    job_type: str = "collector_sync"
+    publish_id: str | None = None
+    container_id: str | None = None
     source_id: str | None = None
     tenant_id: str
     workspace_id: str | None = None
@@ -149,4 +328,3 @@ class RagIngestJobListResponseDTO(BaseModel):
     """Ingestion jobs list response."""
 
     jobs: list[RagIngestJobDTO]
-

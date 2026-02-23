@@ -25,6 +25,8 @@
     "rag_group": "RAG",
     "rag_runtime": "Runtime Config",
     "rag_collectors": "Collectors",
+    "rag_explorer": "Explorer",
+    "rag_publishes": "Publishes",
     "rag_search": "Search",
     "logs": "Logs",
     "settings": "Settings"
@@ -502,6 +504,28 @@
     "empty_collectors": "No collectors configured.",
     "empty_jobs": "No ingestion jobs yet.",
     "search_collectors": "Search collectors...",
+    "search_jobs": "Search jobs..."
+  },
+  "rag_explorer": {
+    "title": "RAG Explorer",
+    "container": "Container",
+    "new_container": "New Container Name",
+    "uploads": "Uploads",
+    "upload_files": "Upload Files",
+    "publish_now": "Publish Now",
+    "schedule_for": "Schedule For",
+    "schedule_publish": "Schedule Publish",
+    "draft_ops": "Draft Operations",
+    "no_draft": "No draft selected.",
+    "no_ops": "No draft operations yet."
+  },
+  "rag_publishes": {
+    "title": "RAG Publishes",
+    "publishes": "Publish Requests",
+    "jobs": "Ingestion Jobs",
+    "empty_publishes": "No publishes yet.",
+    "empty_jobs": "No jobs yet.",
+    "search_publishes": "Search publishes...",
     "search_jobs": "Search jobs..."
   },
   "rag_search": {

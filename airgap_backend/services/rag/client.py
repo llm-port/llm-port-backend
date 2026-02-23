@@ -128,6 +128,92 @@ class RagServiceClient:
         """Fetch one ingestion job."""
         return await self._request("GET", f"/internal/admin/jobs/{job_id}")
 
+    async def create_container(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Create virtual container node."""
+        return await self._request(
+            "POST",
+            "/internal/admin/containers",
+            json_body=payload,
+        )
+
+    async def list_containers_tree(
+        self,
+        tenant_id: str | None = None,
+        workspace_id: str | None = None,
+    ) -> dict[str, Any]:
+        """List container tree."""
+        params: list[str] = []
+        if tenant_id is not None:
+            params.append(f"tenant_id={tenant_id}")
+        if workspace_id is not None:
+            params.append(f"workspace_id={workspace_id}")
+        suffix = f"?{'&'.join(params)}" if params else ""
+        return await self._request("GET", f"/internal/admin/containers/tree{suffix}")
+
+    async def update_container(self, container_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Update virtual container."""
+        return await self._request(
+            "PATCH",
+            f"/internal/admin/containers/{container_id}",
+            json_body=payload,
+        )
+
+    async def delete_container(self, container_id: str) -> dict[str, Any]:
+        """Soft-delete virtual container."""
+        return await self._request("DELETE", f"/internal/admin/containers/{container_id}")
+
+    async def create_upload_presign(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Create presigned URL for upload."""
+        return await self._request(
+            "POST",
+            "/internal/admin/uploads/presign",
+            json_body=payload,
+        )
+
+    async def complete_upload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Finalize uploaded object into draft operation."""
+        return await self._request(
+            "POST",
+            "/internal/admin/uploads/complete",
+            json_body=payload,
+        )
+
+    async def create_draft(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Create editable draft."""
+        return await self._request(
+            "POST",
+            "/internal/admin/drafts",
+            json_body=payload,
+        )
+
+    async def get_draft(self, draft_id: str) -> dict[str, Any]:
+        """Get one draft."""
+        return await self._request("GET", f"/internal/admin/drafts/{draft_id}")
+
+    async def patch_draft(self, draft_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Patch one draft."""
+        return await self._request(
+            "PATCH",
+            f"/internal/admin/drafts/{draft_id}",
+            json_body=payload,
+        )
+
+    async def publish_draft(self, draft_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Trigger publish for one draft."""
+        return await self._request(
+            "POST",
+            f"/internal/admin/drafts/{draft_id}/publish",
+            json_body=payload,
+        )
+
+    async def list_publishes(self, limit: int = 100) -> dict[str, Any]:
+        """List publish requests."""
+        return await self._request("GET", f"/internal/admin/publishes?limit={limit}")
+
+    async def get_publish(self, publish_id: str) -> dict[str, Any]:
+        """Get one publish request."""
+        return await self._request("GET", f"/internal/admin/publishes/{publish_id}")
+
 
 def get_rag_client() -> RagServiceClient:
     """Build a request-scoped RAG client from settings."""

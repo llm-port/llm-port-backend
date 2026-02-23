@@ -85,6 +85,8 @@ class Settings(BaseSettings):
     rag_service_token: str = "dev-rag-service-token"  # noqa: S105
     rag_runtime_secret_header_name: str = "x-embedding-api-key"  # noqa: S105
     rag_timeout_sec: float = 30.0
+    rag_upload_max_file_mb: int = 50
+    rag_upload_allowed_extensions: str = ".pdf,.docx,.txt,.md,.html,.csv,.json"
 
     # Admin dashboard / Grafana embedding settings
     grafana_url: str | None = Field(
