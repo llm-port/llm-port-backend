@@ -297,6 +297,9 @@
       "no_fields": "No se requieren ajustes para este paso.",
       "apply_step": "Aplicar Paso",
       "next_step": "Siguiente Paso"
+    },
+    "modules": {
+      "title": "Modulos"
     }
   },
   "users": {
@@ -510,5 +513,18 @@
   "modules": {
     "disabled_message": "El módulo {{module}} no está habilitado en esta instalación.",
     "disabled_hint": "Contacte a su administrador para habilitar este módulo."
+  },
+  "modules_tab": {
+    "title": "Modulos Opcionales",
+    "description": "Habilitar o deshabilitar modulos opcionales. Deshabilitar detiene los contenedores; habilitar los inicia.",
+    "no_modules": "No hay modulos opcionales configurados en esta instalacion.",
+    "toggle_aria": "Alternar {{module}}",
+    "not_configured": "No configurado. Establezca la variable de entorno correspondiente y reinicie.",
+    "confirm_enable_title": "Habilitar {{module}}?",
+    "confirm_disable_title": "Deshabilitar {{module}}?",
+    "confirm_enable_body": "Se iniciaran todos los contenedores del modulo {{module}}.",
+    "confirm_disable_body": "Se detendran todos los contenedores del modulo {{module}}. Las solicitudes en curso seran interrumpidas.",
+    "partial_error": "Algunos contenedores tuvieron errores: {{errors}}",
+    "action_success": "{{module}} {{action}} exitosamente."
   }
 }

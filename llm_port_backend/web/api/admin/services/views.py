@@ -1,7 +1,9 @@
-"""Admin services manifest endpoint.
+"""Admin services manifest + module lifecycle endpoints.
 
 Returns the list of optional modules and their current status so the
-frontend can show / hide UI sections dynamically.
+frontend can show / hide UI sections dynamically.  Also provides
+enable / disable endpoints that start / stop the Docker containers
+belonging to a module.
 """
 
 from __future__ import annotations
@@ -10,10 +12,14 @@ import logging
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette import status
 
+from llm_port_backend.services.docker.client import DockerService
 from llm_port_backend.settings import settings
+from llm_port_backend.web.api.admin.dependencies import get_docker
+from llm_port_backend.web.api.rbac import require_permission
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +28,9 @@ router = APIRouter()
 # ── Module definitions ────────────────────────────────────────────────
 # Each entry describes an optional module the backend knows about.
 # Adding a new module = append one dict here + add a settings flag.
+#
+# ``container_names`` – the Docker container names belonging to this
+#   module.  Used by the enable / disable endpoints to start / stop them.
 
 _MODULE_DEFS: list[dict[str, Any]] = [
     {
@@ -33,12 +42,33 @@ _MODULE_DEFS: list[dict[str, Any]] = [
         ),
         "settings_flag": "rag_enabled",
         "health_url_fn": lambda: f"{settings.rag_base_url}/health",
+        "container_names": [
+            "llm-port-rag",
+            "llm-port-rag-worker",
+            "llm-port-rag-scheduler",
+        ],
     },
-    # Future modules (pii, auth) are managed by the API gateway and
-    # reflected via its own /v1/services endpoint.  Only modules
-    # consumed directly by the backend are listed here.
+    {
+        "name": "pii",
+        "display_name": "PII Guard",
+        "description": (
+            "Personally Identifiable Information detection and redaction "
+            "service for request / response payloads."
+        ),
+        "settings_flag": "pii_enabled",
+        "health_url_fn": lambda: f"{settings.pii_service_url}/health",
+        "container_names": [
+            "llm-port-pii",
+            "llm-port-pii-worker",
+        ],
+    },
 ]
 
+# Fast lookup by module name.
+_MODULE_MAP: dict[str, dict[str, Any]] = {m["name"]: m for m in _MODULE_DEFS}
+
+
+# ── Helpers ───────────────────────────────────────────────────────────
 
 async def _probe_health(url: str) -> str:
     """Return ``"healthy"`` or ``"unhealthy"`` for a single URL."""
@@ -51,8 +81,31 @@ async def _probe_health(url: str) -> str:
         return "unhealthy"
 
 
+async def _container_states(
+    docker: DockerService,
+    container_names: list[str],
+) -> list[dict[str, str]]:
+    """Return ``[{name, state}]`` for the requested container names."""
+    all_containers = await docker.list_containers(all_=True)
+    # Docker container names start with "/" in the API response.
+    name_map: dict[str, str] = {}
+    for c in all_containers:
+        for n in c.get("Names", []):
+            clean = n.lstrip("/")
+            name_map[clean] = c.get("State", "unknown")
+    return [
+        {"name": cn, "state": name_map.get(cn, "not_found")}
+        for cn in container_names
+    ]
+
+
+# ── GET /services ─────────────────────────────────────────────────────
+
 @router.get("/services")
-async def list_services(request: Request) -> JSONResponse:
+async def list_services(
+    request: Request,
+    docker: DockerService = Depends(get_docker),
+) -> JSONResponse:
     """Return the manifest of optional backend modules.
 
     The frontend uses this to discover which features are available so
@@ -61,21 +114,112 @@ async def list_services(request: Request) -> JSONResponse:
     result: list[dict[str, Any]] = []
 
     for mod in _MODULE_DEFS:
-        enabled: bool = getattr(settings, mod["settings_flag"], False)
+        configured: bool = getattr(settings, mod["settings_flag"], False)
         status_val = "disabled"
+        containers: list[dict[str, str]] = []
 
-        if enabled:
+        if configured:
             health_url = mod["health_url_fn"]()
             status_val = await _probe_health(health_url)
+            containers = await _container_states(
+                docker, mod.get("container_names", []),
+            )
 
         result.append(
             {
                 "name": mod["name"],
                 "display_name": mod["display_name"],
                 "description": mod["description"],
-                "enabled": enabled,
+                "enabled": configured,
                 "status": status_val,
+                "containers": containers,
             }
         )
 
     return JSONResponse(status_code=200, content={"services": result})
+
+
+# ── PUT /services/{name}/enable ───────────────────────────────────────
+
+@router.put("/services/{name}/enable")
+async def enable_module(
+    name: str,
+    request: Request,
+    _user=Depends(require_permission("modules", "manage")),
+    docker: DockerService = Depends(get_docker),
+) -> JSONResponse:
+    """Start all containers belonging to a module."""
+    mod = _MODULE_MAP.get(name)
+    if mod is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown module: {name}",
+        )
+
+    configured: bool = getattr(settings, mod["settings_flag"], False)
+    if not configured:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Module '{name}' is not configured in this deployment. "
+                f"Set {mod['settings_flag']}=true and restart."
+            ),
+        )
+
+    started: list[str] = []
+    errors: list[str] = []
+    for cn in mod.get("container_names", []):
+        try:
+            await docker.start(cn)
+            started.append(cn)
+        except Exception as exc:
+            logger.warning("Failed to start container %s: %s", cn, exc)
+            errors.append(f"{cn}: {exc}")
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "module": name,
+            "action": "enable",
+            "started": started,
+            "errors": errors,
+        },
+    )
+
+
+# ── PUT /services/{name}/disable ──────────────────────────────────────
+
+@router.put("/services/{name}/disable")
+async def disable_module(
+    name: str,
+    request: Request,
+    _user=Depends(require_permission("modules", "manage")),
+    docker: DockerService = Depends(get_docker),
+) -> JSONResponse:
+    """Stop all containers belonging to a module."""
+    mod = _MODULE_MAP.get(name)
+    if mod is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown module: {name}",
+        )
+
+    stopped: list[str] = []
+    errors: list[str] = []
+    for cn in mod.get("container_names", []):
+        try:
+            await docker.stop(cn)
+            stopped.append(cn)
+        except Exception as exc:
+            logger.warning("Failed to stop container %s: %s", cn, exc)
+            errors.append(f"{cn}: {exc}")
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "module": name,
+            "action": "disable",
+            "stopped": stopped,
+            "errors": errors,
+        },
+    )

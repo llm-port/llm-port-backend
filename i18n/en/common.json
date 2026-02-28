@@ -298,6 +298,9 @@
       "no_fields": "No settings are required for this step.",
       "apply_step": "Apply Step",
       "next_step": "Next Step"
+    },
+    "modules": {
+      "title": "Modules"
     }
   },
   "users": {
@@ -594,5 +597,18 @@
   "modules": {
     "disabled_message": "The {{module}} module is not enabled in this deployment.",
     "disabled_hint": "Contact your administrator to enable this module."
+  },
+  "modules_tab": {
+    "title": "Optional Modules",
+    "description": "Enable or disable optional modules. Disabling a module stops its containers; enabling starts them.",
+    "no_modules": "No optional modules are configured in this deployment.",
+    "toggle_aria": "Toggle {{module}}",
+    "not_configured": "Not configured. Set the corresponding environment variable and restart to enable.",
+    "confirm_enable_title": "Enable {{module}}?",
+    "confirm_disable_title": "Disable {{module}}?",
+    "confirm_enable_body": "This will start all containers for the {{module}} module.",
+    "confirm_disable_body": "This will stop all containers for the {{module}} module. Any in-flight requests will be interrupted.",
+    "partial_error": "Some containers had errors: {{errors}}",
+    "action_success": "{{module}} {{action}}d successfully."
   }
 }

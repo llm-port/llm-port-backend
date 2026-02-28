@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     rag_upload_allowed_extensions: str = ".pdf,.docx,.txt,.md,.html,.csv,.json"
     rag_enabled: bool = True
 
+    # PII module settings
+    pii_enabled: bool = False
+    pii_service_url: str = "http://localhost:8003/api"
+
     # Admin dashboard / Grafana embedding settings
     grafana_url: str | None = Field(
         default=None,

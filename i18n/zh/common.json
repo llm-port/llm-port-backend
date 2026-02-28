@@ -297,6 +297,9 @@
       "no_fields": "此步骤不需要设置项。",
       "apply_step": "应用当前步骤",
       "next_step": "下一步"
+    },
+    "modules": {
+      "title": "模块"
     }
   },
   "users": {
@@ -510,5 +513,18 @@
   "modules": {
     "disabled_message": "{{module}} 模块在此部署中未启用。",
     "disabled_hint": "请联系管理员启用此模块。"
+  },
+  "modules_tab": {
+    "title": "可选模块",
+    "description": "启用或禁用可选模块。禁用模块会停止其容器，启用会启动。",
+    "no_modules": "此部署中未配置任何可选模块。",
+    "toggle_aria": "切换 {{module}}",
+    "not_configured": "未配置。请设置相应的环境变量并重启以启用。",
+    "confirm_enable_title": "启用 {{module}}？",
+    "confirm_disable_title": "禁用 {{module}}？",
+    "confirm_enable_body": "将启动 {{module}} 模块的所有容器。",
+    "confirm_disable_body": "将停止 {{module}} 模块的所有容器。进行中的请求将被中断。",
+    "partial_error": "部分容器出错：{{errors}}",
+    "action_success": "{{module}} {{action}} 成功。"
   }
 }
