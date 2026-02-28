@@ -233,35 +233,47 @@ def _rocm_smi_info() -> list[dict[str, object]]:
 def _detect_windows_wmi() -> list[GpuDevice]:
     """Detect GPUs on Windows using WMI (Win32_VideoController).
 
-    Works for NVIDIA, AMD, and Intel GPUs.
+    Works for NVIDIA, AMD, and Intel GPUs.  Uses two PowerShell steps:
+    1.  Basic GPU enumeration via ``Get-CimInstance Win32_VideoController``.
+    2.  64-bit VRAM from the registry (optional — fixes AdapterRAM wrapping
+        at 4 GB on older WMI builds).
     """
     devices: list[GpuDevice] = []
     with contextlib.suppress(Exception):
+        # Step 1 — enumerate GPUs (simple, no inline comments)
         ps_script = (
             "Get-CimInstance Win32_VideoController"
-            " | Select-Object Name, AdapterRAM, DriverVersion, PNPDeviceID"
             " | ForEach-Object {"
-            "   $vram = $_.AdapterRAM;"
-            "   $pnp = $_.PNPDeviceID;"
-            "   # Try 64-bit VRAM from registry for >4GB GPUs"
-            "   $regPath = 'HKLM:\\SYSTEM\\ControlSet001\\Control\\Class"
-            "\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0*';"
-            "   $qw = Get-ItemProperty $regPath"
-            "     -Name 'HardwareInformation.qwMemorySize'"
-            "     -ErrorAction SilentlyContinue"
-            "   | Where-Object { $_.PSChildName -match '\\d+' }"
-            "   | Select-Object -First 1"
-            "     -ExpandProperty 'HardwareInformation.qwMemorySize';"
-            "   if ($qw -and $qw -gt $vram) { $vram = $qw };"
-            "   Write-Output \"$($_.Name)|$vram|$($_.DriverVersion)|$pnp\""
-            " }"
+            " '{0}|{1}|{2}|{3}' -f $_.Name, $_.AdapterRAM,"
+            " $_.DriverVersion, $_.PNPDeviceID }"
         )
         proc = subprocess.run(
             ["powershell", "-NoProfile", "-Command", ps_script],
             capture_output=True, text=True, timeout=10,
         )
         if proc.returncode != 0:
+            logger.debug("WMI GPU query failed (rc=%d): %s", proc.returncode, proc.stderr[:200])
             return devices
+
+        # Step 2 — try 64-bit VRAM from registry (>4 GB GPUs)
+        qw_vram: int | None = None
+        with contextlib.suppress(Exception):
+            reg_script = (
+                "$r = Get-ItemProperty"
+                " 'HKLM:\\SYSTEM\\ControlSet001\\Control\\Class"
+                "\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0*'"
+                " -Name 'HardwareInformation.qwMemorySize'"
+                " -ErrorAction SilentlyContinue"
+                " | Select-Object -First 1"
+                " -ExpandProperty 'HardwareInformation.qwMemorySize';"
+                " if ($r) { $r }"
+            )
+            reg_proc = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", reg_script],
+                capture_output=True, text=True, timeout=5,
+            )
+            if reg_proc.returncode == 0 and reg_proc.stdout.strip():
+                qw_vram = int(reg_proc.stdout.strip())
 
         for idx, line in enumerate(proc.stdout.strip().splitlines()):
             parts = line.split("|")
@@ -275,6 +287,10 @@ def _detect_windows_wmi() -> list[GpuDevice]:
             vram_bytes = 0
             with contextlib.suppress(ValueError):
                 vram_bytes = int(vram_str)
+
+            # Prefer 64-bit registry VRAM if available and larger
+            if qw_vram and qw_vram > vram_bytes:
+                vram_bytes = qw_vram
 
             vendor, compute = _classify_windows_gpu(name, pnp)
 
