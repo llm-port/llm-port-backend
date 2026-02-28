@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -107,21 +108,27 @@ async def _run_compose(
     cmd += list(args)
 
     logger.info("Running: %s", " ".join(cmd))
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout_bytes, stderr_bytes = await proc.communicate()
-    stdout = stdout_bytes.decode(errors="replace").strip()
-    stderr = stderr_bytes.decode(errors="replace").strip()
-    if proc.returncode != 0:
+
+    def _run() -> tuple[int, str, str]:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            timeout=120,
+        )
+        return (
+            result.returncode,
+            result.stdout.decode(errors="replace").strip(),
+            result.stderr.decode(errors="replace").strip(),
+        )
+
+    returncode, stdout, stderr = await asyncio.to_thread(_run)
+    if returncode != 0:
         logger.warning(
             "docker compose exited %d: %s",
-            proc.returncode,
+            returncode,
             stderr or stdout,
         )
-    return proc.returncode, stdout, stderr
+    return returncode, stdout, stderr
 
 
 async def _probe_health(url: str) -> str:
