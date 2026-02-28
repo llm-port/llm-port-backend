@@ -115,22 +115,32 @@ async def list_services(
 
     for mod in _MODULE_DEFS:
         configured: bool = getattr(settings, mod["settings_flag"], False)
-        status_val = "disabled"
-        containers: list[dict[str, str]] = []
 
-        if configured:
+        # Always query container states so the UI can show toggle state
+        # even for modules whose settings flag is off.
+        containers = await _container_states(
+            docker, mod.get("container_names", []),
+        )
+
+        # A module is "running" when at least one of its containers is up.
+        any_running = any(c["state"] == "running" for c in containers)
+
+        # Determine health / status
+        if any_running:
             health_url = mod["health_url_fn"]()
             status_val = await _probe_health(health_url)
-            containers = await _container_states(
-                docker, mod.get("container_names", []),
-            )
+        elif configured:
+            status_val = "configured"
+        else:
+            status_val = "disabled"
 
         result.append(
             {
                 "name": mod["name"],
                 "display_name": mod["display_name"],
                 "description": mod["description"],
-                "enabled": configured,
+                "configured": configured,
+                "enabled": any_running,
                 "status": status_val,
                 "containers": containers,
             }
@@ -154,16 +164,6 @@ async def enable_module(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Unknown module: {name}",
-        )
-
-    configured: bool = getattr(settings, mod["settings_flag"], False)
-    if not configured:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"Module '{name}' is not configured in this deployment. "
-                f"Set {mod['settings_flag']}=true and restart."
-            ),
         )
 
     started: list[str] = []
