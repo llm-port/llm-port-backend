@@ -381,7 +381,13 @@
     "new_provider": "新建提供商",
     "edit_provider": "编辑提供商",
     "search_placeholder": "搜索提供商...",
-    "confirm_delete": "删除该提供商？若仍被运行时引用将失败。"
+    "confirm_delete": "删除该提供商？若仍被运行时引用将失败。",
+    "target_local_docker": "本地 Docker",
+    "target_remote_endpoint": "远程端点",
+    "endpoint_url": "端点 URL",
+    "endpoint_url_help": "远程推理 API 的基础 URL（例如 https://api.example.com/v1）",
+    "api_key": "API 密钥",
+    "api_key_help": "远程端点的可选身份验证密钥"
   },
   "llm_models": {
     "title": "LLM 模型",
@@ -442,7 +448,8 @@
     "openai_compat": "OpenAI 兼容",
     "gpu_detected": "GPU: {{model}} ({{vram}} VRAM)",
     "gpu_none": "未检测到支持的 GPU — CPU 模式",
-    "recommended_tag": "推荐"
+    "recommended_tag": "推荐",
+    "remote_provider_hint": "此提供商为远程端点——无需容器或 GPU 配置。"
   },
   "llm_runtime_detail": {
     "failed_load": "加载运行时失败。",

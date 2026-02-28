@@ -41,6 +41,7 @@ class ProviderTarget(enum.StrEnum):
     """Where the engine runs."""
 
     LOCAL_DOCKER = "local_docker"
+    REMOTE_ENDPOINT = "remote_endpoint"
 
 
 class ModelSource(enum.StrEnum):
@@ -125,6 +126,16 @@ class LLMProvider(Base):
         default=ProviderTarget.LOCAL_DOCKER,
     )
     capabilities: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    endpoint_url: Mapped[str | None] = mapped_column(
+        String(1024),
+        nullable=True,
+        doc="Base URL for remote_endpoint providers.",
+    )
+    api_key_encrypted: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        doc="Encrypted API key for remote endpoint auth.",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

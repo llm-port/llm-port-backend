@@ -382,7 +382,13 @@
     "new_provider": "New Provider",
     "edit_provider": "Edit Provider",
     "search_placeholder": "Search providers...",
-    "confirm_delete": "Delete this provider? This will fail if runtimes still reference it."
+    "confirm_delete": "Delete this provider? This will fail if runtimes still reference it.",
+    "target_local_docker": "Local Docker",
+    "target_remote_endpoint": "Remote Endpoint",
+    "endpoint_url": "Endpoint URL",
+    "endpoint_url_help": "Base URL of the remote inference API (e.g. https://api.example.com/v1)",
+    "api_key": "API Key",
+    "api_key_help": "Optional authentication key for the remote endpoint"
   },
   "llm_models": {
     "title": "LLM Models",
@@ -443,7 +449,8 @@
     "openai_compat": "OpenAI Compatible",
     "gpu_detected": "GPU: {{model}} ({{vram}} VRAM)",
     "gpu_none": "No supported GPU detected — CPU mode",
-    "recommended_tag": "recommended"
+    "recommended_tag": "recommended",
+    "remote_provider_hint": "This provider is a remote endpoint — no container or GPU configuration needed."
   },
   "llm_runtime_detail": {
     "failed_load": "Failed to load runtime.",

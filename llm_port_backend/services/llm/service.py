@@ -57,15 +57,31 @@ class LLMService:
         name: str,
         type_: ProviderType,
         target: ProviderTarget = ProviderTarget.LOCAL_DOCKER,
+        endpoint_url: str | None = None,
+        api_key: str | None = None,
     ) -> LLMProvider:
-        """Register a new LLM engine provider."""
+        """Register a new LLM engine provider.
+
+        For ``REMOTE_ENDPOINT`` providers, ``endpoint_url`` is required
+        and points to an existing OpenAI-compatible API (vLLM, Ollama,
+        TGI, NVIDIA NIM, etc.).  No Docker container is managed — the
+        runtime simply proxies to that URL.
+        """
+        if target == ProviderTarget.REMOTE_ENDPOINT and not endpoint_url:
+            raise ValueError("endpoint_url is required for remote providers")
+
         adapter = get_adapter(type_)
         capabilities = adapter.default_capabilities()
+        if target == ProviderTarget.REMOTE_ENDPOINT:
+            capabilities["remote"] = True
+
         return await provider_dao.create(
             name=name,
             type_=type_,
             target=target,
             capabilities=capabilities,
+            endpoint_url=endpoint_url,
+            api_key_encrypted=api_key,  # TODO: encrypt with SettingsCrypto
         )
 
     # ------------------------------------------------------------------
@@ -211,6 +227,21 @@ class LLMService:
             openai_compat=openai_compat,
         )
 
+        # ── Remote endpoint providers — no container needed ──────────
+        if provider.target == ProviderTarget.REMOTE_ENDPOINT:
+            endpoint_url = provider.endpoint_url
+            if not endpoint_url:
+                raise ValueError("Remote provider has no endpoint_url configured")
+            await runtime_dao.set_container_ref(runtime.id, None, endpoint_url)
+            await runtime_dao.set_status(runtime.id, RuntimeStatus.RUNNING)
+            log.info(
+                "Remote runtime %r → %s (no container)",
+                runtime.name,
+                endpoint_url,
+            )
+            return runtime
+
+        # ── Local Docker providers — build and start container ───────
         # Build container spec
         spec: ContainerSpec = adapter.build_container_spec(
             runtime=runtime,
@@ -259,8 +290,11 @@ class LLMService:
         runtime = await runtime_dao.get(runtime_id)
         if runtime is None:
             raise ValueError(f"Runtime {runtime_id} not found")
+
+        # Remote runtimes have no container — just mark as running
         if not runtime.container_ref:
-            raise ValueError("Runtime has no container reference")
+            await runtime_dao.set_status(runtime_id, RuntimeStatus.RUNNING)
+            return runtime
 
         await self.docker.start(runtime.container_ref)
         await runtime_dao.set_status(runtime_id, RuntimeStatus.STARTING)
@@ -275,8 +309,11 @@ class LLMService:
         runtime = await runtime_dao.get(runtime_id)
         if runtime is None:
             raise ValueError(f"Runtime {runtime_id} not found")
+
+        # Remote runtimes have no container — just mark as stopped
         if not runtime.container_ref:
-            raise ValueError("Runtime has no container reference")
+            await runtime_dao.set_status(runtime_id, RuntimeStatus.STOPPED)
+            return runtime
 
         await runtime_dao.set_status(runtime_id, RuntimeStatus.STOPPING)
         await self.docker.stop(runtime.container_ref)
@@ -292,8 +329,11 @@ class LLMService:
         runtime = await runtime_dao.get(runtime_id)
         if runtime is None:
             raise ValueError(f"Runtime {runtime_id} not found")
+
+        # Remote runtimes have no container — just toggle status
         if not runtime.container_ref:
-            raise ValueError("Runtime has no container reference")
+            await runtime_dao.set_status(runtime_id, RuntimeStatus.RUNNING)
+            return runtime
 
         await self.docker.restart(runtime.container_ref)
         await runtime_dao.set_status(runtime_id, RuntimeStatus.STARTING)

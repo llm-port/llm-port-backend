@@ -381,7 +381,13 @@
     "new_provider": "Neuer Provider",
     "edit_provider": "Provider bearbeiten",
     "search_placeholder": "Nach Providern suchen...",
-    "confirm_delete": "Diesen Provider loeschen? Dies schlaegt fehl, wenn Runtimes ihn noch verwenden."
+    "confirm_delete": "Diesen Provider loeschen? Dies schlaegt fehl, wenn Runtimes ihn noch verwenden.",
+    "target_local_docker": "Lokaler Docker",
+    "target_remote_endpoint": "Remote-Endpunkt",
+    "endpoint_url": "Endpunkt-URL",
+    "endpoint_url_help": "Basis-URL der Remote-Inferenz-API (z. B. https://api.example.com/v1)",
+    "api_key": "API-Schluessel",
+    "api_key_help": "Optionaler Authentifizierungsschluessel fuer den Remote-Endpunkt"
   },
   "llm_models": {
     "title": "LLM-Modelle",
@@ -442,7 +448,8 @@
     "openai_compat": "OpenAI-kompatibel",
     "gpu_detected": "GPU: {{model}} ({{vram}} VRAM)",
     "gpu_none": "Keine unterstuetzte GPU erkannt — CPU-Modus",
-    "recommended_tag": "empfohlen"
+    "recommended_tag": "empfohlen",
+    "remote_provider_hint": "Dieser Provider ist ein Remote-Endpunkt — keine Container- oder GPU-Konfiguration erforderlich."
   },
   "llm_runtime_detail": {
     "failed_load": "Runtime konnte nicht geladen werden.",

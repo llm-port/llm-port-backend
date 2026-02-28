@@ -40,6 +40,8 @@ class ProviderDAO:
         type_: ProviderType,
         target: ProviderTarget = ProviderTarget.LOCAL_DOCKER,
         capabilities: dict | None = None,
+        endpoint_url: str | None = None,
+        api_key_encrypted: str | None = None,
     ) -> LLMProvider:
         """Create a new provider."""
         provider = LLMProvider(
@@ -48,6 +50,8 @@ class ProviderDAO:
             type=type_,
             target=target,
             capabilities=capabilities,
+            endpoint_url=endpoint_url,
+            api_key_encrypted=api_key_encrypted,
         )
         self.session.add(provider)
         await self.session.flush()
@@ -73,6 +77,8 @@ class ProviderDAO:
         *,
         name: str | None = None,
         capabilities: dict | None = None,
+        endpoint_url: str | None = ...,
+        api_key_encrypted: str | None = ...,
     ) -> LLMProvider | None:
         """Patch writable fields on a provider."""
         provider = await self.get(provider_id)
@@ -82,6 +88,10 @@ class ProviderDAO:
             provider.name = name
         if capabilities is not None:
             provider.capabilities = capabilities
+        if endpoint_url is not ...:
+            provider.endpoint_url = endpoint_url
+        if api_key_encrypted is not ...:
+            provider.api_key_encrypted = api_key_encrypted
         return provider
 
     async def delete(self, provider_id: uuid.UUID) -> bool:

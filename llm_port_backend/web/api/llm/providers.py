@@ -48,6 +48,8 @@ async def create_provider(
         name=body.name,
         type_=body.type,
         target=body.target,
+        endpoint_url=body.endpoint_url,
+        api_key=body.api_key,
     )
     await audit_action(
         action="llm.provider.create",
@@ -87,6 +89,8 @@ async def update_provider(
         provider_id,
         name=body.name,
         capabilities=body.capabilities,
+        endpoint_url=body.endpoint_url if body.endpoint_url is not None else ...,
+        api_key_encrypted=body.api_key if body.api_key is not None else ...,
     )
     if provider is None:
         raise HTTPException(status_code=404, detail="Provider not found")

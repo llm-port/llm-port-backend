@@ -29,6 +29,16 @@ class ProviderCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=256)
     type: ProviderType
     target: ProviderTarget = ProviderTarget.LOCAL_DOCKER
+    endpoint_url: str | None = Field(
+        None,
+        max_length=1024,
+        description="Base URL when target is remote_endpoint (e.g. https://api.example.com/v1).",
+    )
+    api_key: str | None = Field(
+        None,
+        max_length=512,
+        description="Optional API key for authenticating with the remote endpoint.",
+    )
 
 
 class ProviderUpdateRequest(BaseModel):
@@ -36,6 +46,8 @@ class ProviderUpdateRequest(BaseModel):
 
     name: str | None = Field(None, min_length=1, max_length=256)
     capabilities: dict | None = None
+    endpoint_url: str | None = Field(None, max_length=1024)
+    api_key: str | None = Field(None, max_length=512)
 
 
 class ProviderDTO(BaseModel):
@@ -45,6 +57,7 @@ class ProviderDTO(BaseModel):
     name: str
     type: ProviderType
     target: ProviderTarget
+    endpoint_url: str | None = None
     capabilities: dict | None = None
     created_at: datetime
     updated_at: datetime
