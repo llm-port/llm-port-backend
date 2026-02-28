@@ -427,7 +427,22 @@
     "endpoint": "Endpoint",
     "create_runtime": "Runtime erstellen",
     "new_runtime": "Neue Runtime",
-    "search_placeholder": "Nach Runtimes suchen..."
+    "search_placeholder": "Nach Runtimes suchen...",
+    "container_image": "Container-Image",
+    "image_auto": "Automatisch (empfohlen)",
+    "image_custom": "Benutzerdefiniertes Image…",
+    "image_custom_placeholder": "z.B. nvcr.io/nvidia/vllm:latest",
+    "advanced_options": "Erweiterte Optionen",
+    "max_model_len": "Max. Modell-Laenge",
+    "dtype": "Datentyp",
+    "gpu_memory_util": "GPU-Speicherauslastung",
+    "tensor_parallel": "Tensor-Parallelitaet",
+    "extra_args": "Zusaetzliche CLI-Argumente",
+    "extra_args_help": "Kommagetrennte Argumente fuer vLLM",
+    "openai_compat": "OpenAI-kompatibel",
+    "gpu_detected": "GPU: {{model}} ({{vram}} VRAM)",
+    "gpu_none": "Keine unterstuetzte GPU erkannt — CPU-Modus",
+    "recommended_tag": "empfohlen"
   },
   "llm_runtime_detail": {
     "failed_load": "Runtime konnte nicht geladen werden.",

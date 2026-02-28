@@ -427,7 +427,22 @@
     "endpoint": "端点",
     "create_runtime": "创建运行时",
     "new_runtime": "新建运行时",
-    "search_placeholder": "搜索运行时..."
+    "search_placeholder": "搜索运行时...",
+    "container_image": "容器镜像",
+    "image_auto": "自动检测（推荐）",
+    "image_custom": "自定义镜像…",
+    "image_custom_placeholder": "如 nvcr.io/nvidia/vllm:latest",
+    "advanced_options": "高级选项",
+    "max_model_len": "最大模型长度",
+    "dtype": "数据类型",
+    "gpu_memory_util": "GPU 显存利用率",
+    "tensor_parallel": "张量并行度",
+    "extra_args": "附加 CLI 参数",
+    "extra_args_help": "逗号分隔的 vLLM 参数",
+    "openai_compat": "OpenAI 兼容",
+    "gpu_detected": "GPU: {{model}} ({{vram}} VRAM)",
+    "gpu_none": "未检测到支持的 GPU — CPU 模式",
+    "recommended_tag": "推荐"
   },
   "llm_runtime_detail": {
     "failed_load": "加载运行时失败。",

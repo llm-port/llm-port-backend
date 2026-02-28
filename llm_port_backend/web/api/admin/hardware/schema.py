@@ -35,9 +35,26 @@ class GpuMetricsDTO(BaseModel):
     vram_total_bytes: int | None = None
 
 
+class VllmImagePresetDTO(BaseModel):
+    """A named vLLM container image option.
+
+    Presets allow admins to register images from custom registries
+    (e.g. NVIDIA NGC ``nvcr.io/nvidia/vllm:latest`` for DGX Spark)
+    alongside the default Docker Hub images.
+    """
+
+    label: str
+    image: str
+    vendor: str | None = None  # "nvidia", "amd", "any", or None
+    description: str | None = None
+    is_default: bool = False
+    is_recommended: bool = False
+
+
 class HardwareDTO(BaseModel):
     """Combined hardware inventory + live metrics."""
 
     gpu: GpuInventoryDTO
     gpu_metrics: GpuMetricsDTO
     recommended_vllm_image: str | None = None
+    vllm_image_presets: list[VllmImagePresetDTO] = Field(default_factory=list)
