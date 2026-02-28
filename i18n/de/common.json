@@ -41,7 +41,9 @@
     "email": "E-Mail",
     "password": "Passwort",
     "login_title": "Bei llm-port anmelden",
-    "login_desc": "Melde dich mit deinen Zugangsdaten an, um das Admin-Dashboard zu oeffnen."
+    "login_desc": "Melde dich mit deinen Zugangsdaten an, um das Admin-Dashboard zu oeffnen.",
+    "or_sso": "oder mit SSO anmelden",
+    "sign_in_with": "Anmelden mit {{provider}}"
   },
   "root_mode": {
     "active": "ROOT MODUS AKTIV",

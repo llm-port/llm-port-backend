@@ -41,7 +41,9 @@
     "email": "邮箱",
     "password": "密码",
     "login_title": "登录 llm-port",
-    "login_desc": "使用你的账户凭据访问管理后台。"
+    "login_desc": "使用您的账户凭据访问管理仪表板。",
+    "or_sso": "或使用SSO登录",
+    "sign_in_with": "使用 {{provider}} 登录"
   },
   "root_mode": {
     "active": "ROOT 模式已启用",

@@ -41,7 +41,9 @@
     "email": "Correo",
     "password": "Contrasena",
     "login_title": "Inicia sesion en llm-port",
-    "login_desc": "Usa tus credenciales para acceder al panel de administracion."
+    "login_desc": "Utilice sus credenciales para acceder al panel de administración.",
+    "or_sso": "o iniciar sesión con SSO",
+    "sign_in_with": "Iniciar sesión con {{provider}}"
   },
   "root_mode": {
     "active": "MODO ROOT ACTIVO",
