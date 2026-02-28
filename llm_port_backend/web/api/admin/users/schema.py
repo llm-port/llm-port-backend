@@ -22,8 +22,26 @@ class RoleDTO(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None = None
+    is_builtin: bool = False
     created_at: datetime
     permissions: list[PermissionDTO] = Field(default_factory=list)
+    user_count: int = 0
+
+
+class CreateRoleRequest(BaseModel):
+    """Create a new custom role."""
+
+    name: str = Field(..., min_length=1, max_length=64)
+    description: str | None = None
+    permission_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class UpdateRoleRequest(BaseModel):
+    """Update a custom role."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    description: str | None = None
+    permission_ids: list[uuid.UUID] | None = None
 
 
 class AdminUserDTO(BaseModel):
@@ -51,4 +69,13 @@ class MeAccessDTO(BaseModel):
 class UpdateUserRolesRequest(BaseModel):
     """Replace the set of assigned roles for a user."""
 
+    role_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class CreateUserRequest(BaseModel):
+    """Admin-initiated user creation."""
+
+    email: str
+    password: str = Field(..., min_length=6)
+    is_superuser: bool = False
     role_ids: list[uuid.UUID] = Field(default_factory=list)

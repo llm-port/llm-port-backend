@@ -1,6 +1,7 @@
 """DAO for role-based access control."""
 
 import uuid
+from typing import Sequence
 
 from fastapi import Depends
 from sqlalchemy import delete, select, tuple_
@@ -153,7 +154,106 @@ class RbacDAO:
 
     async def list_roles(self) -> list[Role]:
         """Return all roles."""
-        result = await self.session.execute(select(Role))
+        result = await self.session.execute(select(Role).order_by(Role.name))
+        return list(result.scalars().all())
+
+    async def get_role_by_id(self, role_id: uuid.UUID) -> Role | None:
+        """Look up a role by ID."""
+        result = await self.session.execute(select(Role).where(Role.id == role_id))
+        return result.scalar_one_or_none()
+
+    # ------------------------------------------------------------------
+    # Role CRUD (custom roles only)
+    # ------------------------------------------------------------------
+
+    async def create_role(
+        self,
+        name: str,
+        description: str | None,
+        permission_ids: list[uuid.UUID],
+    ) -> Role:
+        """Create a custom (non-builtin) role with given permissions."""
+        role = Role(
+            id=uuid.uuid4(),
+            name=name,
+            description=description,
+            is_builtin=False,
+        )
+        self.session.add(role)
+        await self.session.flush()
+
+        if permission_ids:
+            await self.session.execute(
+                pg_insert(RolePermission)
+                .values([{"role_id": role.id, "permission_id": pid} for pid in permission_ids])
+                .on_conflict_do_nothing(),
+            )
+            await self.session.flush()
+
+        # Re-fetch to populate the selectin relationship
+        result = await self.session.execute(select(Role).where(Role.id == role.id))
+        return result.scalar_one()
+
+    async def update_role(
+        self,
+        role_id: uuid.UUID,
+        name: str | None,
+        description: str | None,
+        permission_ids: list[uuid.UUID] | None,
+    ) -> Role | None:
+        """Update a custom role. Returns None if not found."""
+        role = await self.get_role_by_id(role_id)
+        if role is None:
+            return None
+        if name is not None:
+            role.name = name
+        if description is not None:
+            role.description = description
+        if permission_ids is not None:
+            await self.session.execute(
+                delete(RolePermission).where(RolePermission.role_id == role_id),
+            )
+            if permission_ids:
+                await self.session.execute(
+                    pg_insert(RolePermission)
+                    .values([{"role_id": role_id, "permission_id": pid} for pid in permission_ids])
+                    .on_conflict_do_nothing(),
+                )
+        await self.session.flush()
+        # Re-fetch to refresh permissions relationship
+        result = await self.session.execute(select(Role).where(Role.id == role_id))
+        return result.scalar_one()
+
+    async def delete_role(self, role_id: uuid.UUID) -> bool:
+        """Delete a custom role. Returns True if deleted."""
+        role = await self.get_role_by_id(role_id)
+        if role is None:
+            return False
+        # Remove all user-role and role-permission links
+        await self.session.execute(delete(UserRole).where(UserRole.role_id == role_id))
+        await self.session.execute(delete(RolePermission).where(RolePermission.role_id == role_id))
+        await self.session.delete(role)
+        await self.session.flush()
+        return True
+
+    async def count_role_users(self, role_id: uuid.UUID) -> int:
+        """Return the number of users assigned to a role."""
+        from sqlalchemy import func as sa_func  # noqa: PLC0415
+
+        result = await self.session.execute(
+            select(sa_func.count()).select_from(UserRole).where(UserRole.role_id == role_id),
+        )
+        return result.scalar_one()
+
+    # ------------------------------------------------------------------
+    # Permission queries
+    # ------------------------------------------------------------------
+
+    async def list_permissions(self) -> list[Permission]:
+        """Return all known permissions, ordered by resource then action."""
+        result = await self.session.execute(
+            select(Permission).order_by(Permission.resource, Permission.action),
+        )
         return list(result.scalars().all())
 
     # ------------------------------------------------------------------
@@ -284,11 +384,19 @@ class RbacDAO:
                         "id": uuid.uuid4(),
                         "name": role_name,
                         "description": f"Built-in {role_name} role",
+                        "is_builtin": True,
                     }
                     for role_name in role_names
                 ],
             )
             .on_conflict_do_nothing(index_elements=[Role.name]),
+        )
+
+        # Ensure existing built-in roles have is_builtin set to True.
+        from sqlalchemy import update  # noqa: PLC0415
+
+        await self.session.execute(
+            update(Role).where(Role.name.in_(role_names)).values(is_builtin=True),
         )
 
         # Resolve DB IDs for all roles after upsert.
