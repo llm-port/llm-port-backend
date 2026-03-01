@@ -239,29 +239,29 @@ class VLLMAdapter(ProviderAdapter):
         artifacts: list[ModelArtifact],
         model_store_root: str,
     ) -> str:
-        """Determine the host-side model directory from artifacts."""
-        if not artifacts:
-            # Fallback: construct from HF conventions
-            if model.hf_repo_id:
-                parts = model.hf_repo_id.replace("/", "/")
-                rev = model.hf_revision or "main"
-                return f"{model_store_root}/hf/{parts}/{rev}"
-            return f"{model_store_root}/imports/{model.id}"
+        """Determine the host-side model directory.
 
-        # Use the parent directory of the first artifact path
-        from pathlib import PurePosixPath  # noqa: PLC0415
+        Uses the same path formula the download task uses so the result
+        is always correct regardless of how artifact paths were stored
+        (Windows vs. POSIX separators).
+        """
+        # Primary: deterministic path matching the download layout
+        if model.hf_repo_id:
+            rev = model.hf_revision or "main"
+            return f"{model_store_root}/hf/{model.hf_repo_id}/{rev}"
 
-        first_path = PurePosixPath(artifacts[0].path)
-        parent = str(first_path.parent)
-        # Ensure the result is an absolute path.  When artifacts store
-        # only filenames (no directory), PurePosixPath("file").parent
-        # returns ".", which Docker interprets as a 1-char named volume
-        # and rejects with "volume name is too short".
-        if not parent or parent == ".":
-            return f"{model_store_root}/imports/{model.id}"
-        if not PurePosixPath(parent).is_absolute():
-            return f"{model_store_root}/{parent}"
-        return parent
+        # Fallback: derive from the first artifact path (use platform-
+        # aware ``Path`` so Windows backslashes are handled correctly).
+        if artifacts:
+            from pathlib import Path  # noqa: PLC0415
+
+            first_path = Path(artifacts[0].path)
+            parent = str(first_path.parent)
+            if parent and parent != ".":
+                return parent
+
+        # Last resort
+        return f"{model_store_root}/imports/{model.id}"
 
 
 # Self-register on import
