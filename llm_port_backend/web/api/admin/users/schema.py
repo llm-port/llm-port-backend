@@ -72,6 +72,30 @@ class UpdateUserRolesRequest(BaseModel):
     role_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
+class ChangePasswordRequest(BaseModel):
+    """Self-service password change."""
+
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=6)
+
+
+class GenerateApiTokenRequest(BaseModel):
+    """Request to generate an API gateway JWT token."""
+
+    tenant_id: str = Field(default="default", min_length=1, max_length=128)
+    expires_in: int | None = Field(
+        default=None,
+        description="Token lifetime in seconds. None = no expiry.",
+    )
+
+
+class ApiTokenResponse(BaseModel):
+    """Response containing the generated API token."""
+
+    token: str
+    expires_in: int | None = None
+
+
 class CreateUserRequest(BaseModel):
     """Admin-initiated user creation."""
 

@@ -17,8 +17,11 @@ from llm_port_backend.db.models.users import User, current_active_user
 from llm_port_backend.web.api.admin.dependencies import require_superuser
 from llm_port_backend.web.api.admin.users.schema import (
     AdminUserDTO,
+    ApiTokenResponse,
+    ChangePasswordRequest,
     CreateRoleRequest,
     CreateUserRequest,
+    GenerateApiTokenRequest,
     MeAccessDTO,
     PermissionDTO,
     RoleDTO,
@@ -285,3 +288,59 @@ async def delete_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     await session.delete(target)
     await session.flush()
+
+
+# ── Self-service profile endpoints ────────────────────────────────────
+
+
+@router.post("/me/change-password", status_code=status.HTTP_204_NO_CONTENT, name="change_password")
+async def change_password(
+    payload: ChangePasswordRequest,
+    user: Annotated[User, Depends(current_active_user)],
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    """Change the current user's password."""
+    from fastapi_users.password import PasswordHelper  # noqa: PLC0415
+
+    password_helper = PasswordHelper()
+    verified, _ = password_helper.verify_and_update(payload.current_password, user.hashed_password)
+    if not verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect.",
+        )
+    user.hashed_password = password_helper.hash(payload.new_password)
+    session.add(user)
+    await session.flush()
+
+
+@router.post("/me/api-token", response_model=ApiTokenResponse, name="generate_api_token")
+async def generate_api_token(
+    payload: GenerateApiTokenRequest,
+    user: Annotated[User, Depends(current_active_user)],
+) -> ApiTokenResponse:
+    """Generate a JWT token for the LLM API gateway."""
+    import time  # noqa: PLC0415
+
+    import jwt as pyjwt  # noqa: PLC0415
+
+    from llm_port_backend.settings import settings as backend_settings  # noqa: PLC0415
+
+    jwt_secret = backend_settings.users_secret
+    if not jwt_secret:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="JWT secret is not configured.",
+        )
+
+    claims: dict = {
+        "sub": str(user.id),
+        "tenant_id": payload.tenant_id,
+        "email": user.email,
+        "iat": int(time.time()),
+    }
+    if payload.expires_in is not None:
+        claims["exp"] = int(time.time()) + payload.expires_in
+
+    token = pyjwt.encode(claims, jwt_secret, algorithm="HS256")
+    return ApiTokenResponse(token=token, expires_in=payload.expires_in)
