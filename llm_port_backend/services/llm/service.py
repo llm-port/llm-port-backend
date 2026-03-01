@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from pathlib import Path
 from typing import Any
 
 from llm_port_backend.db.dao.llm_dao import (
@@ -19,11 +20,9 @@ from llm_port_backend.db.dao.llm_dao import (
 )
 from llm_port_backend.db.models.llm import (
     DownloadJob,
-    DownloadJobStatus,
     LLMModel,
     LLMProvider,
     LLMRuntime,
-    ModelArtifact,
     ModelSource,
     ModelStatus,
     ProviderTarget,
@@ -56,15 +55,31 @@ class LLMService:
         name: str,
         type_: ProviderType,
         target: ProviderTarget = ProviderTarget.LOCAL_DOCKER,
+        endpoint_url: str | None = None,
+        api_key: str | None = None,
     ) -> LLMProvider:
-        """Register a new LLM engine provider."""
+        """Register a new LLM engine provider.
+
+        For ``REMOTE_ENDPOINT`` providers, ``endpoint_url`` is required
+        and points to an existing OpenAI-compatible API (vLLM, Ollama,
+        TGI, NVIDIA NIM, etc.).  No Docker container is managed — the
+        runtime simply proxies to that URL.
+        """
+        if target == ProviderTarget.REMOTE_ENDPOINT and not endpoint_url:
+            raise ValueError("endpoint_url is required for remote providers")
+
         adapter = get_adapter(type_)
         capabilities = adapter.default_capabilities()
+        if target == ProviderTarget.REMOTE_ENDPOINT:
+            capabilities["remote"] = True
+
         return await provider_dao.create(
             name=name,
             type_=type_,
             target=target,
             capabilities=capabilities,
+            endpoint_url=endpoint_url,
+            api_key_encrypted=api_key,  # TODO: encrypt with SettingsCrypto
         )
 
     # ------------------------------------------------------------------
@@ -112,7 +127,6 @@ class LLMService:
                 hf_repo_id=hf_repo_id,
                 hf_revision=hf_revision,
                 target_dir=target_dir,
-                hf_token=settings.hf_token,
             )
             log.info("Dispatched download task for %s (job=%s)", hf_repo_id, job.id)
         except Exception as exc:
@@ -142,6 +156,14 @@ class LLMService:
         tags: list[str] | None = None,
     ) -> LLMModel:
         """Register a model already present on disk."""
+        # Guard against path traversal — ensure the resolved path is
+        # within the configured model store root.
+        resolved = Path(path).resolve()
+        store_root = Path(settings.model_store_root).resolve()
+        if not str(resolved).startswith(str(store_root)):
+            msg = f"Path '{path}' resolves outside the model store root '{settings.model_store_root}'."
+            raise ValueError(msg)
+
         model = await model_dao.create(
             display_name=display_name,
             source=ModelSource.LOCAL_PATH,
@@ -200,6 +222,21 @@ class LLMService:
             openai_compat=openai_compat,
         )
 
+        # ── Remote endpoint providers — no container needed ──────────
+        if provider.target == ProviderTarget.REMOTE_ENDPOINT:
+            endpoint_url = provider.endpoint_url
+            if not endpoint_url:
+                raise ValueError("Remote provider has no endpoint_url configured")
+            await runtime_dao.set_container_ref(runtime.id, None, endpoint_url)
+            await runtime_dao.set_status(runtime.id, RuntimeStatus.RUNNING)
+            log.info(
+                "Remote runtime %r → %s (no container)",
+                runtime.name,
+                endpoint_url,
+            )
+            return runtime
+
+        # ── Local Docker providers — build and start container ───────
         # Build container spec
         spec: ContainerSpec = adapter.build_container_spec(
             runtime=runtime,
@@ -219,6 +256,10 @@ class LLMService:
                 ports=spec.ports,
                 volumes=spec.volumes,
                 gpu_devices=spec.gpu_devices,
+                gpu_vendor=spec.gpu_vendor,
+                devices=spec.devices,
+                security_opt=spec.security_opt,
+                group_add=spec.group_add,
                 healthcheck=spec.healthcheck,
                 labels=spec.labels,
                 auto_start=True,
@@ -244,8 +285,11 @@ class LLMService:
         runtime = await runtime_dao.get(runtime_id)
         if runtime is None:
             raise ValueError(f"Runtime {runtime_id} not found")
+
+        # Remote runtimes have no container — just mark as running
         if not runtime.container_ref:
-            raise ValueError("Runtime has no container reference")
+            await runtime_dao.set_status(runtime_id, RuntimeStatus.RUNNING)
+            return runtime
 
         await self.docker.start(runtime.container_ref)
         await runtime_dao.set_status(runtime_id, RuntimeStatus.STARTING)
@@ -260,8 +304,11 @@ class LLMService:
         runtime = await runtime_dao.get(runtime_id)
         if runtime is None:
             raise ValueError(f"Runtime {runtime_id} not found")
+
+        # Remote runtimes have no container — just mark as stopped
         if not runtime.container_ref:
-            raise ValueError("Runtime has no container reference")
+            await runtime_dao.set_status(runtime_id, RuntimeStatus.STOPPED)
+            return runtime
 
         await runtime_dao.set_status(runtime_id, RuntimeStatus.STOPPING)
         await self.docker.stop(runtime.container_ref)
@@ -277,8 +324,11 @@ class LLMService:
         runtime = await runtime_dao.get(runtime_id)
         if runtime is None:
             raise ValueError(f"Runtime {runtime_id} not found")
+
+        # Remote runtimes have no container — just toggle status
         if not runtime.container_ref:
-            raise ValueError("Runtime has no container reference")
+            await runtime_dao.set_status(runtime_id, RuntimeStatus.RUNNING)
+            return runtime
 
         await self.docker.restart(runtime.container_ref)
         await runtime_dao.set_status(runtime_id, RuntimeStatus.STARTING)

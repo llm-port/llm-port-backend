@@ -155,6 +155,23 @@ async def _tcp_health(host: str, port: int, timeout: float = 0.8) -> bool:
         return False
 
 
+def _collect_gpu_metrics() -> dict[str, float | int | None]:
+    """Collect GPU utilization and VRAM usage.
+
+    Delegates to the centralised ``services.gpu.metrics`` module which
+    supports NVIDIA (pynvml), AMD (Linux sysfs), and Windows perf
+    counters across all GPU vendors.
+    """
+    from llm_port_backend.services.gpu.metrics import collect_gpu_metrics  # noqa: PLC0415
+
+    m = collect_gpu_metrics()
+    return {
+        "util": m.util_percent,
+        "vram_used": m.vram_used_bytes,
+        "vram_total": m.vram_total_bytes,
+    }
+
+
 def _collect_host_snapshot() -> dict[str, object]:
     """Collect host snapshot with optional psutil support."""
     snapshot: dict[str, object] = {
@@ -166,6 +183,9 @@ def _collect_host_snapshot() -> dict[str, object]:
         "swap_total": None,
         "network_rx": None,
         "network_tx": None,
+        "gpu_util_percent": None,
+        "gpu_vram_used_bytes": None,
+        "gpu_vram_total_bytes": None,
     }
 
     with contextlib.suppress(Exception):
@@ -186,6 +206,13 @@ def _collect_host_snapshot() -> dict[str, object]:
         snapshot["network_rx"] = int(net.bytes_recv)
         snapshot["network_tx"] = int(net.bytes_sent)
 
+    # GPU metrics — try NVIDIA pynvml first, fall back to Windows
+    # performance counters (works with AMD / Intel / any GPU).
+    gpu = _collect_gpu_metrics()
+    snapshot["gpu_util_percent"] = gpu["util"]
+    snapshot["gpu_vram_used_bytes"] = gpu["vram_used"]
+    snapshot["gpu_vram_total_bytes"] = gpu["vram_total"]
+
     return snapshot
 
 
@@ -199,9 +226,7 @@ async def overview(
     raw_containers = await docker.list_containers(all_=True)
     containers_total = len(raw_containers)
     containers_running = sum(1 for c in raw_containers if str(c.get("State", "")).lower() == "running")
-    containers_restarting = sum(
-        1 for c in raw_containers if str(c.get("State", "")).lower() == "restarting"
-    )
+    containers_restarting = sum(1 for c in raw_containers if str(c.get("State", "")).lower() == "restarting")
 
     restart_counts = [_to_float(c.get("RestartCount"), default=0.0) for c in raw_containers]
     restart_total = int(sum(restart_counts))
@@ -225,7 +250,7 @@ async def overview(
         cpu_percent = round(_docker_cpu_percent(stats), 2)
         mem_bytes = _docker_memory_usage_bytes(stats)
         mem_limit = int(_to_float((stats.get("memory_stats", {}) or {}).get("limit"), default=0.0))
-        networks = (stats.get("networks", {}) or {})
+        networks = stats.get("networks", {}) or {}
         if isinstance(networks, dict):
             for iface in networks.values():
                 if isinstance(iface, dict):
@@ -338,9 +363,9 @@ async def overview(
         api_error_rate_5xx=round(_prometheus_api_5xx_rate_percent(), 4),
         postgres_connections=postgres_connections,
         postgres_max_connections=postgres_max_connections,
-        gpu_util_percent=None,
-        gpu_vram_used_bytes=None,
-        gpu_vram_total_bytes=None,
+        gpu_util_percent=host.get("gpu_util_percent"),
+        gpu_vram_used_bytes=host.get("gpu_vram_used_bytes"),
+        gpu_vram_total_bytes=host.get("gpu_vram_total_bytes"),
         top_cpu_containers=cpu_users,
         top_memory_containers=memory_users,
     )

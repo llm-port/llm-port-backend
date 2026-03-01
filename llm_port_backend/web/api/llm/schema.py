@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from llm_port_backend.db.models.llm import (
     ArtifactFormat,
@@ -29,6 +29,31 @@ class ProviderCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=256)
     type: ProviderType
     target: ProviderTarget = ProviderTarget.LOCAL_DOCKER
+    endpoint_url: str | None = Field(
+        None,
+        max_length=1024,
+        description="Base URL when target is remote_endpoint (e.g. https://api.example.com/v1).",
+    )
+    api_key: str | None = Field(
+        None,
+        max_length=512,
+        description="Optional API key for authenticating with the remote endpoint.",
+    )
+
+
+class TestEndpointRequest(BaseModel):
+    """Request body for testing a remote endpoint's OpenAI compatibility."""
+
+    endpoint_url: str = Field(..., min_length=1, max_length=1024)
+    api_key: str | None = Field(None, max_length=512)
+
+
+class TestEndpointResponse(BaseModel):
+    """Response for the test-endpoint probe."""
+
+    compatible: bool
+    models: list[str] = Field(default_factory=list)
+    error: str | None = None
 
 
 class ProviderUpdateRequest(BaseModel):
@@ -36,6 +61,8 @@ class ProviderUpdateRequest(BaseModel):
 
     name: str | None = Field(None, min_length=1, max_length=256)
     capabilities: dict | None = None
+    endpoint_url: str | None = Field(None, max_length=1024)
+    api_key: str | None = Field(None, max_length=512)
 
 
 class ProviderDTO(BaseModel):
@@ -45,6 +72,7 @@ class ProviderDTO(BaseModel):
     name: str
     type: ProviderType
     target: ProviderTarget
+    endpoint_url: str | None = None
     capabilities: dict | None = None
     created_at: datetime
     updated_at: datetime
@@ -72,6 +100,14 @@ class ModelRegisterRequest(BaseModel):
     display_name: str = Field(..., min_length=1)
     path: str = Field(..., min_length=1)
     tags: list[str] | None = None
+
+    @field_validator("path")
+    @classmethod
+    def _reject_path_traversal(cls, v: str) -> str:
+        if ".." in v:
+            msg = "Path must not contain '..' segments."
+            raise ValueError(msg)
+        return v
 
 
 class ModelDTO(BaseModel):

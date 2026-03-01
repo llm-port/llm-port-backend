@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     model_store_root: str = "/srv/llm-port/models"
     hf_token: str | None = None
     default_vllm_image: str = "vllm/vllm-openai:latest"
+    default_vllm_rocm_image: str = "vllm/vllm-openai:latest-rocm"
+
+    # JSON-encoded list of additional vLLM image presets.
+    # Each entry: {"label": "...", "image": "...", "vendor": "nvidia|amd|any", "description": "..."}
+    # Example: '[{"label":"DGX Spark","image":"nvcr.io/nvidia/vllm:latest","vendor":"nvidia","description":"NVIDIA-optimised build for DGX Spark"}]'
+    vllm_image_presets: str = "[]"
     llm_graph_db_host: str = "localhost"
     llm_graph_db_port: int = 5432
     llm_graph_db_user: str = "llm_user"
@@ -87,6 +93,11 @@ class Settings(BaseSettings):
     rag_timeout_sec: float = 30.0
     rag_upload_max_file_mb: int = 50
     rag_upload_allowed_extensions: str = ".pdf,.docx,.txt,.md,.html,.csv,.json"
+    rag_enabled: bool = True
+
+    # PII module settings
+    pii_enabled: bool = True
+    pii_service_url: str = "http://localhost:8003/api"
 
     # Admin dashboard / Grafana embedding settings
     grafana_url: str | None = Field(
@@ -174,11 +185,7 @@ class Settings(BaseSettings):
         """Parse optional comma-separated allowlist for log labels."""
         if not self.logs_allowed_labels_raw:
             return None
-        labels = {
-            chunk.strip().lower()
-            for chunk in self.logs_allowed_labels_raw.split(",")
-            if chunk.strip()
-        }
+        labels = {chunk.strip().lower() for chunk in self.logs_allowed_labels_raw.split(",") if chunk.strip()}
         return labels or None
 
     @property

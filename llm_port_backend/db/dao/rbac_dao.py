@@ -153,7 +153,106 @@ class RbacDAO:
 
     async def list_roles(self) -> list[Role]:
         """Return all roles."""
-        result = await self.session.execute(select(Role))
+        result = await self.session.execute(select(Role).order_by(Role.name))
+        return list(result.scalars().all())
+
+    async def get_role_by_id(self, role_id: uuid.UUID) -> Role | None:
+        """Look up a role by ID."""
+        result = await self.session.execute(select(Role).where(Role.id == role_id))
+        return result.scalar_one_or_none()
+
+    # ------------------------------------------------------------------
+    # Role CRUD (custom roles only)
+    # ------------------------------------------------------------------
+
+    async def create_role(
+        self,
+        name: str,
+        description: str | None,
+        permission_ids: list[uuid.UUID],
+    ) -> Role:
+        """Create a custom (non-builtin) role with given permissions."""
+        role = Role(
+            id=uuid.uuid4(),
+            name=name,
+            description=description,
+            is_builtin=False,
+        )
+        self.session.add(role)
+        await self.session.flush()
+
+        if permission_ids:
+            await self.session.execute(
+                pg_insert(RolePermission)
+                .values([{"role_id": role.id, "permission_id": pid} for pid in permission_ids])
+                .on_conflict_do_nothing(),
+            )
+            await self.session.flush()
+
+        # Re-fetch to populate the selectin relationship
+        result = await self.session.execute(select(Role).where(Role.id == role.id))
+        return result.scalar_one()
+
+    async def update_role(
+        self,
+        role_id: uuid.UUID,
+        name: str | None,
+        description: str | None,
+        permission_ids: list[uuid.UUID] | None,
+    ) -> Role | None:
+        """Update a custom role. Returns None if not found."""
+        role = await self.get_role_by_id(role_id)
+        if role is None:
+            return None
+        if name is not None:
+            role.name = name
+        if description is not None:
+            role.description = description
+        if permission_ids is not None:
+            await self.session.execute(
+                delete(RolePermission).where(RolePermission.role_id == role_id),
+            )
+            if permission_ids:
+                await self.session.execute(
+                    pg_insert(RolePermission)
+                    .values([{"role_id": role_id, "permission_id": pid} for pid in permission_ids])
+                    .on_conflict_do_nothing(),
+                )
+        await self.session.flush()
+        # Re-fetch to refresh permissions relationship
+        result = await self.session.execute(select(Role).where(Role.id == role_id))
+        return result.scalar_one()
+
+    async def delete_role(self, role_id: uuid.UUID) -> bool:
+        """Delete a custom role. Returns True if deleted."""
+        role = await self.get_role_by_id(role_id)
+        if role is None:
+            return False
+        # Remove all user-role and role-permission links
+        await self.session.execute(delete(UserRole).where(UserRole.role_id == role_id))
+        await self.session.execute(delete(RolePermission).where(RolePermission.role_id == role_id))
+        await self.session.delete(role)
+        await self.session.flush()
+        return True
+
+    async def count_role_users(self, role_id: uuid.UUID) -> int:
+        """Return the number of users assigned to a role."""
+        from sqlalchemy import func as sa_func  # noqa: PLC0415
+
+        result = await self.session.execute(
+            select(sa_func.count()).select_from(UserRole).where(UserRole.role_id == role_id),
+        )
+        return result.scalar_one()
+
+    # ------------------------------------------------------------------
+    # Permission queries
+    # ------------------------------------------------------------------
+
+    async def list_permissions(self) -> list[Permission]:
+        """Return all known permissions, ordered by resource then action."""
+        result = await self.session.execute(
+            select(Permission).order_by(Permission.resource, Permission.action),
+        )
         return list(result.scalars().all())
 
     # ------------------------------------------------------------------
@@ -163,9 +262,7 @@ class RbacDAO:
     async def get_user_roles(self, user_id: uuid.UUID) -> list[Role]:
         """Return all roles assigned to a user."""
         result = await self.session.execute(
-            select(Role)
-            .join(UserRole, UserRole.role_id == Role.id)
-            .where(UserRole.user_id == user_id),
+            select(Role).join(UserRole, UserRole.role_id == Role.id).where(UserRole.user_id == user_id),
         )
         return list(result.scalars().all())
 
@@ -200,13 +297,45 @@ class RbacDAO:
     # ------------------------------------------------------------------
 
     async def get_user_permissions(self, user_id: uuid.UUID) -> list[Permission]:
-        """Return the union of all permissions from the user's roles."""
-        result = await self.session.execute(
-            select(Permission)
-            .join(RolePermission, RolePermission.permission_id == Permission.id)
-            .join(UserRole, UserRole.role_id == RolePermission.role_id)
+        """Return the union of all permissions from the user's direct roles AND group-inherited roles."""
+        from llm_port_backend.db.models.groups import GroupRole, UserGroup  # noqa: PLC0415
+
+        # Direct role permissions
+        direct = (
+            select(Permission.id)
+            .join(
+                RolePermission,
+                RolePermission.permission_id == Permission.id,
+            )
+            .join(
+                UserRole,
+                UserRole.role_id == RolePermission.role_id,
+            )
             .where(UserRole.user_id == user_id)
-            .distinct(),
+        )
+
+        # Group-inherited role permissions
+        group = (
+            select(Permission.id)
+            .join(
+                RolePermission,
+                RolePermission.permission_id == Permission.id,
+            )
+            .join(
+                GroupRole,
+                GroupRole.role_id == RolePermission.role_id,
+            )
+            .join(
+                UserGroup,
+                UserGroup.group_id == GroupRole.group_id,
+            )
+            .where(UserGroup.user_id == user_id)
+        )
+
+        combined_ids = direct.union(group).subquery()
+
+        result = await self.session.execute(
+            select(Permission).where(Permission.id.in_(select(combined_ids.c.id))),
         )
         return list(result.scalars().all())
 
@@ -216,8 +345,11 @@ class RbacDAO:
         resource: str,
         action: str,
     ) -> bool:
-        """Check whether any of the user's roles grants (resource, action)."""
-        result = await self.session.execute(
+        """Check whether any of the user's direct or group-inherited roles grants (resource, action)."""
+        from llm_port_backend.db.models.groups import GroupRole, UserGroup  # noqa: PLC0415
+
+        # Direct assignment check
+        direct = await self.session.execute(
             select(Permission.id)
             .join(RolePermission, RolePermission.permission_id == Permission.id)
             .join(UserRole, UserRole.role_id == RolePermission.role_id)
@@ -228,7 +360,23 @@ class RbacDAO:
             )
             .limit(1),
         )
-        return result.scalar_one_or_none() is not None
+        if direct.scalar_one_or_none() is not None:
+            return True
+
+        # Group-inherited check
+        group = await self.session.execute(
+            select(Permission.id)
+            .join(RolePermission, RolePermission.permission_id == Permission.id)
+            .join(GroupRole, GroupRole.role_id == RolePermission.role_id)
+            .join(UserGroup, UserGroup.group_id == GroupRole.group_id)
+            .where(
+                UserGroup.user_id == user_id,
+                Permission.resource == resource,
+                Permission.action == action,
+            )
+            .limit(1),
+        )
+        return group.scalar_one_or_none() is not None
 
     # ------------------------------------------------------------------
     # Seeding
@@ -269,10 +417,7 @@ class RbacDAO:
                 tuple_(Permission.resource, Permission.action).in_(permission_pairs),
             ),
         )
-        perm_map = {
-            (perm.resource, perm.action): perm
-            for perm in permission_rows.scalars().all()
-        }
+        perm_map = {(perm.resource, perm.action): perm for perm in permission_rows.scalars().all()}
 
         # 2) Upsert all built-in roles.
         role_names = sorted(_DEFAULT_ROLES.keys())
@@ -284,11 +429,19 @@ class RbacDAO:
                         "id": uuid.uuid4(),
                         "name": role_name,
                         "description": f"Built-in {role_name} role",
+                        "is_builtin": True,
                     }
                     for role_name in role_names
                 ],
             )
             .on_conflict_do_nothing(index_elements=[Role.name]),
+        )
+
+        # Ensure existing built-in roles have is_builtin set to True.
+        from sqlalchemy import update  # noqa: PLC0415
+
+        await self.session.execute(
+            update(Role).where(Role.name.in_(role_names)).values(is_builtin=True),
         )
 
         # Resolve DB IDs for all roles after upsert.
