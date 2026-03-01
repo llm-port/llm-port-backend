@@ -111,10 +111,10 @@ class LLMService:
         )
         job = await job_dao.create(model.id)
 
-        # Build target directory
-        org_repo = hf_repo_id.replace("/", "/")
-        rev = hf_revision or "main"
-        target_dir = f"{settings.model_store_root}/hf/{org_repo}/{rev}"
+        # The download task uses model_store_root/hub as the HF hub
+        # cache_dir.  Files land in the standard HF cache layout so
+        # vLLM can resolve models by repo ID.
+        target_dir = f"{settings.model_store_root}/hub"
 
         # Dispatch async task — non-fatal if RabbitMQ is temporarily
         # unreachable; the user can retry from the Jobs page.
@@ -262,6 +262,7 @@ class LLMService:
                 group_add=spec.group_add,
                 healthcheck=spec.healthcheck,
                 labels=spec.labels,
+                ipc_mode=spec.ipc_mode,
                 auto_start=True,
             )
             container_id = container_info.get("Id", "")

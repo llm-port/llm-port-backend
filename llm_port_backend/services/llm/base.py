@@ -46,6 +46,7 @@ class ContainerSpec:
     devices: list[str] | None = None
     security_opt: list[str] | None = None
     group_add: list[str] | None = None
+    ipc_mode: str | None = None
     healthcheck: dict[str, Any] | None = None
     labels: dict[str, str] | None = None
 

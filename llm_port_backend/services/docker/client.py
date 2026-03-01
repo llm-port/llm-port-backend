@@ -123,6 +123,7 @@ class DockerService:
         group_add: list[str] | None = None,
         healthcheck: dict[str, Any] | None = None,
         labels: dict[str, str] | None = None,
+        ipc_mode: str | None = None,
     ) -> dict[str, Any]:
         """
         Create (and optionally start) a container.
@@ -200,6 +201,8 @@ class DockerService:
             host_config["SecurityOpt"] = security_opt
         if group_add:
             host_config["GroupAdd"] = group_add
+        if ipc_mode:
+            host_config["IpcMode"] = ipc_mode
 
         config["HostConfig"] = host_config
 

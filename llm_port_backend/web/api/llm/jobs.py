@@ -121,8 +121,7 @@ async def retry_job(
 
     hf_repo_id = model.hf_repo_id if model else ""
     hf_revision = model.hf_revision if model else None
-    rev = hf_revision or "main"
-    target_dir = f"{settings.model_store_root}/hf/{hf_repo_id}/{rev}"
+    target_dir = f"{settings.model_store_root}/hub"
 
     await download_model_task.kiq(
         model_id=str(job.model_id),
@@ -130,7 +129,6 @@ async def retry_job(
         hf_repo_id=hf_repo_id,
         hf_revision=hf_revision,
         target_dir=target_dir,
-        hf_token=settings.hf_token,
     )
 
     await audit_action(

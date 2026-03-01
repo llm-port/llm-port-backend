@@ -48,8 +48,13 @@ def _run_download_sync(
     target_dir: str,
     hf_token: str | None,
     progress_callback: object,
-) -> None:
-    """Run the HF download in a thread — calls *progress_callback(pct)* periodically."""
+) -> str:
+    """Run the HF download in a thread — calls *progress_callback(pct)* periodically.
+
+    Downloads into the standard HuggingFace hub cache structure under
+    *target_dir* (used as ``cache_dir``).  Returns the absolute path to
+    the snapshot directory that contains the model files.
+    """
     from pathlib import Path  # noqa: PLC0415
 
     from huggingface_hub import HfApi, hf_hub_download  # noqa: PLC0415
@@ -65,14 +70,14 @@ def _run_download_sync(
         # Fall back to snapshot_download if we can't enumerate files
         from huggingface_hub import snapshot_download  # noqa: PLC0415
 
-        snapshot_download(
+        snapshot_dir = snapshot_download(
             repo_id=hf_repo_id,
             revision=hf_revision,
-            local_dir=target_dir,
+            cache_dir=target_dir,
             token=hf_token,
         )
         progress_callback(85)  # type: ignore[operator]
-        return
+        return snapshot_dir
 
     log.info(
         "Downloading %d files for %s (rev %s)",
@@ -86,12 +91,19 @@ def _run_download_sync(
             repo_id=hf_repo_id,
             filename=sibling.rfilename,
             revision=hf_revision,
-            local_dir=target_dir,
+            cache_dir=target_dir,
             token=hf_token,
         )
         # 0-85% is downloading, 85-90% is scanning, 90-100% is finalising
         pct = int((idx / total_files) * 85)
         progress_callback(pct)  # type: ignore[operator]
+
+    # Derive the snapshot directory from the HF cache structure:
+    # {cache_dir}/models--{org}--{model}/snapshots/{commit_hash}/
+    commit_hash = repo_info.sha
+    model_cache_name = f"models--{hf_repo_id.replace('/', '--')}"
+    snapshot_dir = str(Path(target_dir) / model_cache_name / "snapshots" / commit_hash)
+    return snapshot_dir
 
 
 @broker.task(retry_on_error=False)
@@ -194,8 +206,10 @@ async def _do_download(
 
     revision = hf_revision or "main"
 
-    # Run the blocking HF download in a thread with progress callbacks
-    await asyncio.to_thread(
+    # Run the blocking HF download in a thread with progress callbacks.
+    # target_dir is used as the HF hub cache_dir; the function returns
+    # the snapshot directory containing the actual model files.
+    snapshot_dir = await asyncio.to_thread(
         _run_download_sync,
         hf_repo_id,
         revision,
@@ -207,8 +221,8 @@ async def _do_download(
     # 90%: scanning artifacts
     await _flush_progress(90)
 
-    # Scan downloaded files
-    artifacts = scan_model_directory(target_dir)
+    # Scan downloaded files in the snapshot directory
+    artifacts = scan_model_directory(snapshot_dir)
     if artifacts:
         await artifact_dao.create_batch(model_id, artifacts)
 

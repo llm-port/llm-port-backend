@@ -79,18 +79,21 @@ class VLLMAdapter(ProviderAdapter):
         """
         Build a Docker container spec for vLLM.
 
-        The model directory is mounted read-only into the container at
-        ``/models/<hf_repo_id or model_id>``.
+        The host model store (which doubles as the HuggingFace cache) is
+        mounted into the container at ``/root/.cache/huggingface/hub`` so
+        vLLM can locate models by their repository ID, matching the
+        approach shown in the official vLLM Docker documentation::
+
+            docker run --gpus all \\
+                -v ~/.cache/huggingface:/root/.cache/huggingface \\
+                --ipc=host -p 8000:8000 \\
+                vllm/vllm-openai:latest --model org/model-name
 
         GPU vendor auto-detection selects the correct container image
         (CUDA vs ROCm) and Docker passthrough mechanism automatically.
         """
         gc: dict[str, Any] = runtime.generic_config or {}
         pc: dict[str, Any] = runtime.provider_config or {}
-
-        # Resolve the model path from the first artifact's directory
-        model_dir = self._resolve_model_dir(model, artifacts, model_store_root)
-        container_model_path = f"/models/{model.hf_repo_id or str(model.id)}"
 
         # ── GPU vendor detection & image selection ────────────────────
         inventory = detect_gpus()
@@ -113,8 +116,9 @@ class VLLMAdapter(ProviderAdapter):
             image,
         )
 
-        # Build vLLM CLI args
-        cmd = ["--model", container_model_path]
+        # ── Model argument — pass the HF repo ID directly ────────────
+        model_name = model.hf_repo_id or str(model.id)
+        cmd = ["--model", model_name]
 
         # Generic config → vLLM flags
         if max_model_len := gc.get("max_model_len"):
@@ -146,13 +150,25 @@ class VLLMAdapter(ProviderAdapter):
             "8000/tcp": [{"HostIp": "0.0.0.0", "HostPort": host_port}],
         }
 
-        volumes = [f"{model_dir}:{container_model_path}:ro"]
+        # ── Volume mount — expose the HF cache to the container ──────
+        # The download task uses ``cache_dir=model_store_root`` which
+        # creates the standard HF cache layout directly under
+        # model_store_root (models--org--model/snapshots/...).
+        # Mount it as the container's HF hub cache directory so vLLM
+        # resolves the model by repo ID automatically.
+        volumes = [f"{model_store_root}:/root/.cache/huggingface/hub"]
 
         # GPU devices
         gpu_devices = gc.get("gpu_devices", "all")
 
-        # Environment
-        env: list[str] = []
+        # ── Environment ───────────────────────────────────────────────
+        env: list[str] = [
+            # Prevent vLLM from attempting downloads inside the container
+            "HF_HUB_OFFLINE=1",
+            "TRANSFORMERS_OFFLINE=1",
+        ]
+        if settings.hf_token:
+            env.append(f"HF_TOKEN={settings.hf_token}")
         if gc.get("log_level"):
             env.append(f"VLLM_LOG_LEVEL={gc['log_level']}")
 
@@ -188,6 +204,7 @@ class VLLMAdapter(ProviderAdapter):
             volumes=volumes,
             gpu_devices=gpu_devices if inventory.has_gpu else None,
             gpu_vendor=gpu_vendor if inventory.has_gpu else None,
+            ipc_mode="host",
             healthcheck=healthcheck,
             labels=labels,
         )
@@ -239,19 +256,7 @@ class VLLMAdapter(ProviderAdapter):
         artifacts: list[ModelArtifact],
         model_store_root: str,
     ) -> str:
-        """Determine the host-side model directory.
-
-        Uses the same path formula the download task uses so the result
-        is always correct regardless of how artifact paths were stored
-        (Windows vs. POSIX separators).
-        """
-        # Primary: deterministic path matching the download layout
-        if model.hf_repo_id:
-            rev = model.hf_revision or "main"
-            return f"{model_store_root}/hf/{model.hf_repo_id}/{rev}"
-
-        # Fallback: derive from the first artifact path (use platform-
-        # aware ``Path`` so Windows backslashes are handled correctly).
+        """Determine the host-side model directory for imported (non-HF) models."""
         if artifacts:
             from pathlib import Path  # noqa: PLC0415
 
@@ -260,7 +265,6 @@ class VLLMAdapter(ProviderAdapter):
             if parent and parent != ".":
                 return parent
 
-        # Last resort
         return f"{model_store_root}/imports/{model.id}"
 
 
