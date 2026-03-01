@@ -33,7 +33,8 @@
     "groups": "Grupos",
     "auth_providers": "Proveedores de autenticación",
     "pinned": "Fijado",
-    "reset_nav_order": "Restablecer orden de navegación"
+    "reset_nav_order": "Restablecer orden de navegación",
+    "security_map": "Mapa de Seguridad"
   },
   "auth": {
     "logout": "Cerrar sesion",
@@ -679,5 +680,33 @@
     "test_connection": "Probar conexión",
     "test_success": "Conexión exitosa.",
     "test_failed": "Prueba de conexión fallida."
+  },
+  "security_map": {
+    "title": "Mapa de Residencia de Datos",
+    "card_title": "Residencia de Datos",
+    "subtitle": "Resumen de dónde se procesan sus datos de inferencia",
+    "badge_air_gapped": "Air-Gapped ✓",
+    "badge_hybrid": "Híbrido",
+    "badge_cloud_only": "Solo Nube",
+    "badge_none": "Sin Proveedores",
+    "local_title": "Local (On-Premises)",
+    "cloud_title": "Nube (Remoto)",
+    "local_desc": "Los datos permanecen dentro de su infraestructura privada. Sin llamadas de red externas para inferencia.",
+    "cloud_desc": "Las solicitudes de inferencia se envían a endpoints de nube externos. Los datos salen de su red.",
+    "local_providers": "Proveedores Locales",
+    "remote_providers": "Proveedores en la Nube",
+    "local_runtimes": "Runtimes Locales",
+    "remote_runtimes": "Runtimes en la Nube",
+    "local_short": "Local",
+    "cloud_short": "Nube",
+    "local_tooltip": "Proveedores ejecutándose en infraestructura local",
+    "cloud_tooltip": "Proveedores conectados a endpoints de nube remotos",
+    "local_pct": "{{pct}}% on-premises",
+    "bar_local": "On-Premises",
+    "bar_cloud": "Nube",
+    "no_local": "No hay proveedores locales configurados.",
+    "no_remote": "No hay proveedores en la nube configurados.",
+    "no_runtimes": "Sin runtimes desplegados",
+    "runtimes_active": "{{active}} / {{total}} runtimes activos"
   }
 }

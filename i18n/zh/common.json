@@ -33,7 +33,8 @@
     "groups": "组",
     "auth_providers": "认证提供商",
     "pinned": "固定",
-    "reset_nav_order": "重置导航顺序"
+    "reset_nav_order": "重置导航顺序",
+    "security_map": "安全地图"
   },
   "auth": {
     "logout": "退出登录",
@@ -679,5 +680,33 @@
     "test_connection": "测试连接",
     "test_success": "连接成功。",
     "test_failed": "连接测试失败。"
+  },
+  "security_map": {
+    "title": "数据驻留地图",
+    "card_title": "数据驻留",
+    "subtitle": "您的推理数据处理位置概览",
+    "badge_air_gapped": "Air-Gapped ✓",
+    "badge_hybrid": "混合",
+    "badge_cloud_only": "仅云端",
+    "badge_none": "无提供商",
+    "local_title": "本地（私有部署）",
+    "cloud_title": "云端（远程）",
+    "local_desc": "数据保留在您的私有基础设施中。推理不进行外部网络调用。",
+    "cloud_desc": "推理请求发送到外部云端点。数据离开您的网络。",
+    "local_providers": "本地提供商",
+    "remote_providers": "云端提供商",
+    "local_runtimes": "本地运行时",
+    "remote_runtimes": "云端运行时",
+    "local_short": "本地",
+    "cloud_short": "云端",
+    "local_tooltip": "在本地基础设施上运行的提供商",
+    "cloud_tooltip": "连接到远程云端点的提供商",
+    "local_pct": "{{pct}}% 私有部署",
+    "bar_local": "私有部署",
+    "bar_cloud": "云端",
+    "no_local": "未配置本地提供商。",
+    "no_remote": "未配置云端提供商。",
+    "no_runtimes": "未部署运行时",
+    "runtimes_active": "{{active}} / {{total}} 运行时活跃"
   }
 }

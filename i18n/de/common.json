@@ -33,7 +33,8 @@
     "groups": "Gruppen",
     "auth_providers": "Auth-Anbieter",
     "pinned": "Fixiert",
-    "reset_nav_order": "Navigationsreihenfolge zurücksetzen"
+    "reset_nav_order": "Navigationsreihenfolge zurücksetzen",
+    "security_map": "Sicherheitskarte"
   },
   "auth": {
     "logout": "Abmelden",
@@ -679,5 +680,33 @@
     "test_connection": "Verbindung testen",
     "test_success": "Verbindung erfolgreich.",
     "test_failed": "Verbindungstest fehlgeschlagen."
+  },
+  "security_map": {
+    "title": "Datenresidenz-Karte",
+    "card_title": "Datenresidenz",
+    "subtitle": "Übersicht, wo Ihre Inferenzdaten verarbeitet werden",
+    "badge_air_gapped": "Air-Gapped ✓",
+    "badge_hybrid": "Hybrid",
+    "badge_cloud_only": "Nur Cloud",
+    "badge_none": "Keine Provider",
+    "local_title": "Lokal (On-Premises)",
+    "cloud_title": "Cloud (Remote)",
+    "local_desc": "Daten bleiben innerhalb Ihrer privaten Infrastruktur. Keine externen Netzwerkaufrufe für Inferenz.",
+    "cloud_desc": "Inferenzanfragen werden an externe Cloud-Endpunkte gesendet. Daten verlassen Ihr Netzwerk.",
+    "local_providers": "Lokale Provider",
+    "remote_providers": "Cloud Provider",
+    "local_runtimes": "Lokale Runtimes",
+    "remote_runtimes": "Cloud Runtimes",
+    "local_short": "Lokal",
+    "cloud_short": "Cloud",
+    "local_tooltip": "Provider, die auf lokaler Infrastruktur laufen",
+    "cloud_tooltip": "Provider, die sich mit Remote-Cloud-Endpunkten verbinden",
+    "local_pct": "{{pct}}% On-Premises",
+    "bar_local": "On-Premises",
+    "bar_cloud": "Cloud",
+    "no_local": "Keine lokalen Provider konfiguriert.",
+    "no_remote": "Keine Cloud-Provider konfiguriert.",
+    "no_runtimes": "Keine Runtimes bereitgestellt",
+    "runtimes_active": "{{active}} / {{total}} Runtimes aktiv"
   }
 }

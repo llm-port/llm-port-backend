@@ -39,7 +39,8 @@
     "groups": "Groups",
     "auth_providers": "Auth Providers",
     "pinned": "Pinned",
-    "reset_nav_order": "Reset navigation order"
+    "reset_nav_order": "Reset navigation order",
+    "security_map": "Security Map"
   },
   "auth": {
     "logout": "Logout",
@@ -763,5 +764,33 @@
     "test_connection": "Test Connection",
     "test_success": "Connection successful.",
     "test_failed": "Connection test failed."
+  },
+  "security_map": {
+    "title": "Data Residency Map",
+    "card_title": "Data Residency",
+    "subtitle": "Overview of where your inference data is processed",
+    "badge_air_gapped": "Air-Gapped ✓",
+    "badge_hybrid": "Hybrid",
+    "badge_cloud_only": "Cloud Only",
+    "badge_none": "No Providers",
+    "local_title": "Local (On-Premises)",
+    "cloud_title": "Cloud (Remote)",
+    "local_desc": "Data stays within your private infrastructure. No external network calls for inference.",
+    "cloud_desc": "Inference requests are sent to external cloud endpoints. Data leaves your network.",
+    "local_providers": "Local Providers",
+    "remote_providers": "Cloud Providers",
+    "local_runtimes": "Local Runtimes",
+    "remote_runtimes": "Cloud Runtimes",
+    "local_short": "Local",
+    "cloud_short": "Cloud",
+    "local_tooltip": "Providers running on local infrastructure",
+    "cloud_tooltip": "Providers connecting to remote cloud endpoints",
+    "local_pct": "{{pct}}% on-premises",
+    "bar_local": "On-Premises",
+    "bar_cloud": "Cloud",
+    "no_local": "No local providers configured.",
+    "no_remote": "No cloud providers configured.",
+    "no_runtimes": "No runtimes deployed",
+    "runtimes_active": "{{active}} / {{total}} runtimes active"
   }
 }
