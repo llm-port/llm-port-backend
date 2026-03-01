@@ -28,6 +28,17 @@ class ImageCheckResponse(BaseModel):
     exists: bool
     image: str
     tag: str
+    pulling: bool = False
+    pull_id: str | None = None
+
+
+class PullStartedResponse(BaseModel):
+    """Returned when a pull is started or already in progress."""
+
+    pull_id: str
+    image: str
+    tag: str
+    already_pulling: bool = False
 
 
 class PruneImagesRequest(BaseModel):

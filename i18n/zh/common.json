@@ -481,7 +481,9 @@
     "image_available": "镜像已在本地可用。",
     "image_checking": "正在检查镜像…",
     "image_pull_button": "拉取镜像",
-    "image_pulling": "正在拉取镜像…这可能需要几分钟。",
+    "image_pulling": "正在拉取镜像…",
+    "image_pull_starting": "正在开始下载…",
+    "image_pull_layers": "层",
     "image_pull_success": "镜像拉取成功。",
     "image_pull_failed": "镜像拉取失败：{{error}}"
   },

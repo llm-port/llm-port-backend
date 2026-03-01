@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from starlette import status
 
 from llm_port_backend.db.dao.audit_dao import AuditDAO
 from llm_port_backend.db.models.containers import AuditResult, ContainerClass, ContainerPolicy
 from llm_port_backend.db.models.users import User
 from llm_port_backend.services.docker.client import DockerService
+from llm_port_backend.services.docker.pull_tracker import pull_tracker
 from llm_port_backend.services.policy.enforcement import Action, PolicyEnforcer
 from llm_port_backend.web.api.admin.dependencies import (
     audit_action,
@@ -25,6 +28,7 @@ from llm_port_backend.web.api.admin.images.schema import (
     PruneImagesRequest,
     PruneReport,
     PullImageRequest,
+    PullStartedResponse,
 )
 
 router = APIRouter()
@@ -56,17 +60,27 @@ async def check_image(
     docker: DockerService = Depends(get_docker),
     _user: User = Depends(require_superuser),
 ) -> ImageCheckResponse:
-    """Check whether an image:tag exists locally."""
+    """Check whether an image:tag exists locally, and whether a pull is active."""
     needle = f"{image}:{tag}"
+    exists = False
     raw_images = await docker.list_images()
     for img in raw_images:
         for repo_tag in img.get("RepoTags") or []:
             if repo_tag == needle:
-                return ImageCheckResponse(exists=True, image=image, tag=tag)
-    return ImageCheckResponse(exists=False, image=image, tag=tag)
+                exists = True
+                break
+
+    active_job = pull_tracker.get_active_for(image, tag)
+    return ImageCheckResponse(
+        exists=exists,
+        image=image,
+        tag=tag,
+        pulling=active_job is not None,
+        pull_id=active_job.pull_id if active_job else None,
+    )
 
 
-@router.post("/pull", status_code=status.HTTP_204_NO_CONTENT, name="pull_image")
+@router.post("/pull", response_model=PullStartedResponse, name="pull_image")
 async def pull_image(
     body: PullImageRequest,
     user: User = Depends(require_superuser),
@@ -74,22 +88,63 @@ async def pull_image(
     enforcer: PolicyEnforcer = Depends(get_policy_enforcer),
     root_mode: bool = Depends(get_root_mode_active),
     audit_dao: AuditDAO = Depends(),
-) -> None:
-    """Pull an image from a registry. Allowed for all admin users."""
-    # image.pull is allowed for admin on all container classes (§5.2);
-    # no container class context here, so we use a fixed check:
-    # if not root_mode and a platform-specific policy were to be enforced,
-    # callers could explicitly register and check. For now allow all superusers.
-    await docker.pull_image(from_image=body.image, tag=body.tag)
-    await audit_action(
-        action="image.pull",
-        target_type="image",
-        target_id=f"{body.image}:{body.tag}",
-        result=AuditResult.ALLOW,
-        actor_id=user.id,
-        severity="normal",
-        audit_dao=audit_dao,
-        metadata_json=json.dumps({"image": body.image, "tag": body.tag}),
+) -> PullStartedResponse:
+    """Start pulling an image in the background.
+
+    Returns immediately with a ``pull_id``. If the same image is already
+    being pulled, the existing ``pull_id`` is returned (deduplication).
+
+    Use ``GET /pull/{pull_id}/progress`` (SSE) to stream progress.
+    """
+    job, is_new = await pull_tracker.start_pull(docker, body.image, body.tag)
+
+    if is_new:
+        await audit_action(
+            action="image.pull",
+            target_type="image",
+            target_id=f"{body.image}:{body.tag}",
+            result=AuditResult.ALLOW,
+            actor_id=user.id,
+            severity="normal",
+            audit_dao=audit_dao,
+            metadata_json=json.dumps({"image": body.image, "tag": body.tag, "pull_id": job.pull_id}),
+        )
+
+    return PullStartedResponse(
+        pull_id=job.pull_id,
+        image=body.image,
+        tag=body.tag,
+        already_pulling=not is_new,
+    )
+
+
+@router.get("/pull/{pull_id}/progress", name="pull_progress")
+async def pull_progress(
+    pull_id: str,
+    _user: User = Depends(require_superuser),
+) -> StreamingResponse:
+    """Stream pull progress as Server-Sent Events.
+
+    Event types: ``progress``, ``complete``, ``error``.
+    """
+    job = pull_tracker.get_job(pull_id)
+    if job is None:
+        # Job not found (expired or invalid) — send a single error event
+        async def _not_found() -> Any:
+            yield f"event: error\ndata: {json.dumps({'error': 'Pull job not found', 'pull_id': pull_id})}\n\n"
+
+        return StreamingResponse(_not_found(), media_type="text/event-stream")
+
+    async def _stream() -> Any:
+        async for msg in pull_tracker.subscribe(job):
+            event = msg["event"]
+            data = json.dumps(msg["data"])
+            yield f"event: {event}\ndata: {data}\n\n"
+
+    return StreamingResponse(
+        _stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

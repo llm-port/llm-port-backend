@@ -481,7 +481,9 @@
     "image_available": "Imagen disponible localmente.",
     "image_checking": "Verificando imagen…",
     "image_pull_button": "Descargar imagen",
-    "image_pulling": "Descargando imagen… esto puede tardar varios minutos.",
+    "image_pulling": "Descargando imagen…",
+    "image_pull_starting": "Iniciando descarga…",
+    "image_pull_layers": "capas",
     "image_pull_success": "Imagen descargada exitosamente.",
     "image_pull_failed": "Error al descargar imagen: {{error}}"
   },

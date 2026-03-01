@@ -482,7 +482,9 @@
     "image_available": "Image available locally.",
     "image_checking": "Checking image…",
     "image_pull_button": "Pull Image",
-    "image_pulling": "Pulling image… this may take several minutes.",
+    "image_pulling": "Pulling image…",
+    "image_pull_starting": "Starting download…",
+    "image_pull_layers": "layers",
     "image_pull_success": "Image pulled successfully.",
     "image_pull_failed": "Failed to pull image: {{error}}"
   },
