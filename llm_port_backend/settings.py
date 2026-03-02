@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     model_store_root: str = "/srv/llm-port/models"
     hf_token: str | None = None
     default_vllm_image: str = "vllm/vllm-openai:latest"
-    default_vllm_rocm_image: str = "vllm/vllm-openai:latest-rocm"
+    default_vllm_rocm_image: str = "vllm/vllm-openai-rocm:latest"
     # Legacy image for GPUs with compute capability < 8.0 (Turing/Volta).
     # vLLM >= 0.7 uses the V1 engine which only supports FA2 (CC >= 8.0).
     # v0.6.6 uses V0 engine + XFormers (CC >= 7.0) and works in Docker

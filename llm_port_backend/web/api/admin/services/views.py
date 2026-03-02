@@ -183,6 +183,14 @@ async def _container_states(
     return [{"name": cn, "state": name_map.get(cn, "not_found")} for cn in container_names]
 
 
+def _container_states_from_name_map(
+    name_map: dict[str, str],
+    container_names: list[str],
+) -> list[dict[str, str]]:
+    """Resolve desired container states from a precomputed Docker name->state map."""
+    return [{"name": cn, "state": name_map.get(cn, "not_found")} for cn in container_names]
+
+
 # ── GET /services ─────────────────────────────────────────────────────
 
 
@@ -197,28 +205,42 @@ async def list_services(
     it can show / hide navigation items and page sections dynamically.
     """
     result: list[dict[str, Any]] = []
+    health_checks: list[tuple[int, asyncio.Task[str]]] = []
+
+    docker_reachable = True
+    try:
+        all_containers = await docker.list_containers(all_=True)
+        name_map: dict[str, str] = {}
+        for container in all_containers:
+            for raw_name in container.get("Names", []):
+                name_map[raw_name.lstrip("/")] = container.get("State", "unknown")
+    except Exception:
+        docker_reachable = False
+        logger.warning("Docker API unreachable — reporting all containers as unknown", exc_info=True)
+        name_map = {}
 
     for mod in _MODULE_DEFS:
         configured: bool = getattr(settings, mod["settings_flag"], False)
+        container_names = mod.get("container_names", [])
+        containers = _container_states_from_name_map(name_map, container_names) if docker_reachable else [
+            {"name": cn, "state": "unknown"} for cn in container_names
+        ]
 
-        # Always query container states so the UI can show toggle state
-        # even for modules whose settings flag is off.
-        containers = await _container_states(
-            docker,
-            mod.get("container_names", []),
-        )
-
-        # A module is "running" when at least one of its containers is up.
         any_running = any(c["state"] == "running" for c in containers)
-
-        # Determine health / status
         if any_running:
-            health_url = mod["health_url_fn"]()
-            status_val = await _probe_health(health_url)
-        elif configured:
-            status_val = "configured"
-        else:
-            status_val = "disabled"
+            result.append(
+                {
+                    "name": mod["name"],
+                    "display_name": mod["display_name"],
+                    "description": mod["description"],
+                    "configured": configured,
+                    "enabled": True,
+                    "status": "unknown",
+                    "containers": containers,
+                }
+            )
+            health_checks.append((len(result) - 1, asyncio.create_task(_probe_health(mod["health_url_fn"]()))))
+            continue
 
         result.append(
             {
@@ -226,11 +248,16 @@ async def list_services(
                 "display_name": mod["display_name"],
                 "description": mod["description"],
                 "configured": configured,
-                "enabled": any_running,
-                "status": status_val,
+                "enabled": False,
+                "status": "configured" if configured else "disabled",
                 "containers": containers,
             }
         )
+
+    if health_checks:
+        statuses = await asyncio.gather(*(task for _, task in health_checks), return_exceptions=False)
+        for (idx, _), status_val in zip(health_checks, statuses):
+            result[idx]["status"] = status_val
 
     return JSONResponse(status_code=200, content={"services": result})
 

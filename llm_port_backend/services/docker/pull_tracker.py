@@ -57,6 +57,7 @@ class PullJob:
     layers: dict[str, LayerProgress] = field(default_factory=dict)
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
+    last_update_at: float = field(default_factory=time.time)
     _event: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
     _subscribers: int = field(default=0, repr=False)
 
@@ -139,7 +140,9 @@ class PullTracker:
         """
         job._subscribers += 1
         try:
-            last_percent = -1.0
+            last_snapshot: tuple[float, int, int, int, int] | None = None
+            last_emit_at = 0.0
+            emit_interval_sec = 5.0
             while True:
                 # Wait for a progress notification or check periodically
                 try:
@@ -153,9 +156,24 @@ class PullTracker:
 
                 if job.state == PullState.PULLING:
                     pct = job.percent
-                    # Only emit if progress changed
-                    if pct != last_percent:
-                        last_percent = pct
+                    layers_done = sum(
+                        1
+                        for l in job.layers.values()
+                        if l.status in ("Pull complete", "Already exists")
+                    )
+                    snapshot = (
+                        pct,
+                        job.overall_current,
+                        job.overall_total,
+                        layers_done,
+                        len(job.layers),
+                    )
+                    now = time.time()
+                    # Emit when metrics change OR as periodic heartbeat so the UI
+                    # does not appear stalled while Docker reports static progress.
+                    if snapshot != last_snapshot or (now - last_emit_at) >= emit_interval_sec:
+                        last_snapshot = snapshot
+                        last_emit_at = now
                         yield {
                             "event": "progress",
                             "data": {
@@ -165,11 +183,7 @@ class PullTracker:
                                 "percent": pct,
                                 "current_bytes": job.overall_current,
                                 "total_bytes": job.overall_total,
-                                "layers_done": sum(
-                                    1
-                                    for l in job.layers.values()
-                                    if l.status in ("Pull complete", "Already exists")
-                                ),
+                                "layers_done": layers_done,
                                 "layers_total": len(job.layers),
                             },
                         }
@@ -202,6 +216,7 @@ class PullTracker:
     async def _run_pull(self, docker: DockerService, job: PullJob) -> None:
         """Execute the pull with streaming progress updates."""
         try:
+            logger.info("Image pull started for %s", job.image_ref)
             # aiodocker stream=True returns JSON chunks
             async for chunk in docker.client.images.pull(
                 from_image=job.image,
@@ -219,6 +234,7 @@ class PullTracker:
                     layer.status = status
                     layer.current = detail.get("current", layer.current)
                     layer.total = detail.get("total", layer.total)
+                job.last_update_at = time.time()
 
                 # Check for error in the chunk
                 if "error" in chunk:
@@ -229,6 +245,12 @@ class PullTracker:
 
             job.state = PullState.COMPLETE
             job.finished_at = time.time()
+            logger.info(
+                "Image pull completed for %s in %.1fs (layers=%d)",
+                job.image_ref,
+                job.finished_at - job.started_at,
+                len(job.layers),
+            )
         except Exception as exc:
             job.state = PullState.FAILED
             job.error = str(exc)

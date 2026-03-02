@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -32,6 +34,7 @@ from llm_port_backend.web.api.admin.images.schema import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/", response_model=list[ImageSummaryDTO], name="list_images")
@@ -99,16 +102,26 @@ async def pull_image(
     job, is_new = await pull_tracker.start_pull(docker, body.image, body.tag)
 
     if is_new:
-        await audit_action(
-            action="image.pull",
-            target_type="image",
-            target_id=f"{body.image}:{body.tag}",
-            result=AuditResult.ALLOW,
-            actor_id=user.id,
-            severity="normal",
-            audit_dao=audit_dao,
-            metadata_json=json.dumps({"image": body.image, "tag": body.tag, "pull_id": job.pull_id}),
-        )
+        # Audit is best-effort here. Pull start should not fail just because
+        # the audit DB path is temporarily degraded.
+        try:
+            await audit_action(
+                action="image.pull",
+                target_type="image",
+                target_id=f"{body.image}:{body.tag}",
+                result=AuditResult.ALLOW,
+                actor_id=user.id,
+                severity="normal",
+                audit_dao=audit_dao,
+                metadata_json=json.dumps({"image": body.image, "tag": body.tag, "pull_id": job.pull_id}),
+            )
+        except Exception:
+            logger.exception(
+                "Failed to write audit event for image pull start: %s:%s (pull_id=%s)",
+                body.image,
+                body.tag,
+                job.pull_id,
+            )
 
     return PullStartedResponse(
         pull_id=job.pull_id,
@@ -136,10 +149,18 @@ async def pull_progress(
         return StreamingResponse(_not_found(), media_type="text/event-stream")
 
     async def _stream() -> Any:
-        async for msg in pull_tracker.subscribe(job):
-            event = msg["event"]
-            data = json.dumps(msg["data"])
-            yield f"event: {event}\ndata: {data}\n\n"
+        try:
+            async for msg in pull_tracker.subscribe(job):
+                event = msg["event"]
+                data = json.dumps(msg["data"])
+                yield f"event: {event}\ndata: {data}\n\n"
+        except asyncio.CancelledError:
+            # Normal when browser closes/reconnects EventSource.
+            return
+        except Exception as exc:
+            logger.warning("Pull progress stream crashed for pull_id=%s: %s", pull_id, exc)
+            payload = json.dumps({"error": str(exc), "pull_id": pull_id})
+            yield f"event: error\ndata: {payload}\n\n"
 
     return StreamingResponse(
         _stream(),

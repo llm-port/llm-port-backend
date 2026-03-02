@@ -70,6 +70,39 @@ def _setup_db(app: FastAPI) -> None:  # pragma: no cover
     )
 
 
+async def _ensure_api_secret_read_grants(app: FastAPI) -> None:  # pragma: no cover
+    """Ensure llm_port_api DB role can read backend secret settings.
+
+    llm_port_api loads its JWT verification secret from
+    ``llm_port_backend.system_setting_secret`` at startup. If the
+    ``llm_user`` role lacks SELECT rights, API falls back to empty secret
+    and returns ``JWT secret is not configured``.
+    """
+    from sqlalchemy import text  # noqa: PLC0415
+
+    async with app.state.db_session_factory() as session:
+        try:
+            role_exists = await session.execute(
+                text("SELECT 1 FROM pg_roles WHERE rolname = 'llm_user'"),
+            )
+            if role_exists.scalar_one_or_none() is None:
+                log.warning("Role 'llm_user' not found; skipping API secret-read grants.")
+                await session.rollback()
+                return
+            await session.execute(text("GRANT USAGE ON SCHEMA public TO llm_user"))
+            await session.execute(text("GRANT SELECT ON TABLE system_setting_secret TO llm_user"))
+            await session.execute(
+                text(
+                    "ALTER DEFAULT PRIVILEGES FOR ROLE llm_port_backend IN SCHEMA public "
+                    "GRANT SELECT ON TABLES TO llm_user",
+                ),
+            )
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            log.exception("Failed to ensure llm_user secret-read grants.")
+
+
 def setup_opentelemetry(app: FastAPI) -> None:  # pragma: no cover
     """
     Enables opentelemetry instrumentation.
@@ -227,6 +260,7 @@ async def lifespan_setup(
     if not broker.is_worker_process:
         await broker.startup()
     _setup_db(app)
+    await _ensure_api_secret_read_grants(app)
 
     # Load secrets from DB before any service that needs them
     await _load_secrets_from_db(app)
@@ -286,36 +320,46 @@ async def _seed_secrets(app: FastAPI) -> None:  # pragma: no cover
     jwt_keys = ("llm_port_backend.users_secret", "llm_port_api.jwt_secret")
 
     async with app.state.db_session_factory() as session:
-        # Check which keys are missing
-        missing: list[str] = []
-        for db_key in jwt_keys:
-            row = await session.execute(
-                text("SELECT 1 FROM system_setting_secret WHERE key = :k"),
-                {"k": db_key},
-            )
-            if row.fetchone() is None:
-                missing.append(db_key)
+        # Serialize secret seeding across concurrent startup processes.
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext('llm_port_backend_seed_secrets'))"),
+        )
 
-        if missing:
-            # Generate one shared secret for all missing JWT keys
+        # Prefer existing backend secret if present; otherwise generate a new shared secret.
+        current_row = await session.execute(
+            text("SELECT ciphertext FROM system_setting_secret WHERE key = :k"),
+            {"k": "llm_port_backend.users_secret"},
+        )
+        current_ciphertext = current_row.scalar_one_or_none()
+
+        if current_ciphertext is None:
             shared_secret = _secrets.token_urlsafe(32)
-            ciphertext = crypto.encrypt(shared_secret)
+        else:
+            try:
+                shared_secret = crypto.decrypt(current_ciphertext)
+            except Exception:
+                log.exception("Failed to decrypt existing users secret; reseeding.")
+                shared_secret = _secrets.token_urlsafe(32)
 
-            for db_key in missing:
-                await session.execute(
-                    text(
-                        "INSERT INTO system_setting_secret "
-                        "(key, ciphertext, nonce, kek_version, updated_by) "
-                        "VALUES (:k, :c, '', 1, 'system-seed')",
-                    ),
-                    {"k": db_key, "c": ciphertext},
-                )
-                log.info("Seeded secret '%s' into DB.", db_key)
-
-            # Push into runtime settings
-            object.__setattr__(settings, "users_secret", shared_secret)
+        ciphertext = crypto.encrypt(shared_secret)
+        for db_key in jwt_keys:
+            await session.execute(
+                text(
+                    "INSERT INTO system_setting_secret "
+                    "(key, ciphertext, nonce, kek_version, updated_by) "
+                    "VALUES (:k, :c, '', 1, NULL) "
+                    "ON CONFLICT (key) DO UPDATE SET "
+                    "ciphertext = EXCLUDED.ciphertext, "
+                    "nonce = EXCLUDED.nonce, "
+                    "kek_version = EXCLUDED.kek_version, "
+                    "updated_by = EXCLUDED.updated_by",
+                ),
+                {"k": db_key, "c": ciphertext},
+            )
+            log.info("Seeded secret '%s' into DB.", db_key)
 
         await session.commit()
+        object.__setattr__(settings, "users_secret", shared_secret)
 
 
 async def _seed_dev_user(app: FastAPI) -> None:

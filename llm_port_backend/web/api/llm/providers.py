@@ -11,6 +11,7 @@ from starlette import status
 from llm_port_backend.db.dao.audit_dao import AuditDAO
 from llm_port_backend.db.dao.llm_dao import ProviderDAO, RuntimeDAO
 from llm_port_backend.db.models.containers import AuditResult
+from llm_port_backend.db.models.llm import LLMProvider
 from llm_port_backend.db.models.users import User
 from llm_port_backend.services.llm.service import LLMService
 from llm_port_backend.web.api.admin.dependencies import audit_action
@@ -25,6 +26,23 @@ from llm_port_backend.web.api.llm.schema import (
 from llm_port_backend.web.api.rbac import require_permission
 
 router = APIRouter()
+
+
+def _extract_remote_model(capabilities: dict | None) -> str | None:
+    """Return the optional remote model name stored in provider capabilities."""
+    if not isinstance(capabilities, dict):
+        return None
+    value = capabilities.get("remote_model")
+    if isinstance(value, str):
+        value = value.strip()
+        return value or None
+    return None
+
+
+def _provider_to_dto(provider: LLMProvider) -> ProviderDTO:
+    """Serialize a provider including derived remote_model metadata."""
+    dto = ProviderDTO.model_validate(provider)
+    return dto.model_copy(update={"remote_model": _extract_remote_model(provider.capabilities)})
 
 
 @router.post("/test-endpoint", response_model=TestEndpointResponse)
@@ -127,7 +145,7 @@ async def list_providers(
 ) -> list[ProviderDTO]:
     """List all registered LLM providers."""
     providers = await provider_dao.list_all()
-    return [ProviderDTO.model_validate(p) for p in providers]
+    return [_provider_to_dto(p) for p in providers]
 
 
 @router.post("/", response_model=ProviderDTO, status_code=status.HTTP_201_CREATED)
@@ -146,6 +164,7 @@ async def create_provider(
         target=body.target,
         endpoint_url=body.endpoint_url,
         api_key=body.api_key,
+        remote_model=body.remote_model,
     )
     await audit_action(
         action="llm.provider.create",
@@ -156,7 +175,7 @@ async def create_provider(
         severity="normal",
         audit_dao=audit_dao,
     )
-    return ProviderDTO.model_validate(provider)
+    return _provider_to_dto(provider)
 
 
 @router.get("/{provider_id}", response_model=ProviderDTO)
@@ -169,7 +188,7 @@ async def get_provider(
     provider = await provider_dao.get(provider_id)
     if provider is None:
         raise HTTPException(status_code=404, detail="Provider not found")
-    return ProviderDTO.model_validate(provider)
+    return _provider_to_dto(provider)
 
 
 @router.patch("/{provider_id}", response_model=ProviderDTO)
@@ -181,10 +200,31 @@ async def update_provider(
     audit_dao: AuditDAO = Depends(),
 ) -> ProviderDTO:
     """Patch writable fields on a provider."""
+    existing = await provider_dao.get(provider_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    capabilities_changed = False
+    next_capabilities: dict | None = None
+    if body.capabilities is not None:
+        next_capabilities = dict(body.capabilities)
+        capabilities_changed = True
+
+    if "remote_model" in body.model_fields_set:
+        if next_capabilities is None:
+            base = existing.capabilities if isinstance(existing.capabilities, dict) else {}
+            next_capabilities = dict(base)
+        remote_model = body.remote_model.strip() if isinstance(body.remote_model, str) else None
+        if remote_model:
+            next_capabilities["remote_model"] = remote_model
+        else:
+            next_capabilities.pop("remote_model", None)
+        capabilities_changed = True
+
     provider = await provider_dao.update(
         provider_id,
         name=body.name,
-        capabilities=body.capabilities,
+        capabilities=next_capabilities if capabilities_changed else None,
         endpoint_url=body.endpoint_url if body.endpoint_url is not None else ...,
         api_key_encrypted=body.api_key if body.api_key is not None else ...,
     )
@@ -199,7 +239,7 @@ async def update_provider(
         severity="normal",
         audit_dao=audit_dao,
     )
-    return ProviderDTO.model_validate(provider)
+    return _provider_to_dto(provider)
 
 
 @router.delete("/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)

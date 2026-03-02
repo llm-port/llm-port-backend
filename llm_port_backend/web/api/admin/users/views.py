@@ -6,7 +6,7 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
@@ -66,6 +66,33 @@ async def _build_admin_user_dto(user: User, rbac_dao: RbacDAO) -> AdminUserDTO:
         roles=[_role_to_dto(role) for role in sorted(roles, key=lambda r: r.name)],
         permissions=_permissions_to_dto(permissions),
     )
+
+
+async def _resolve_users_secret(session: AsyncSession) -> str:
+    """Resolve backend JWT signing secret with DB fallback."""
+    from llm_port_backend.services.system_settings.crypto import SettingsCrypto  # noqa: PLC0415
+    from llm_port_backend.settings import settings as backend_settings  # noqa: PLC0415
+
+    secret = backend_settings.users_secret.strip()
+    if secret:
+        return secret
+    if not backend_settings.settings_master_key:
+        return ""
+
+    row = await session.execute(
+        text("SELECT ciphertext FROM system_setting_secret WHERE key = :k"),
+        {"k": "llm_port_backend.users_secret"},
+    )
+    ciphertext = row.scalar_one_or_none()
+    if not ciphertext:
+        return ""
+    try:
+        secret = SettingsCrypto(backend_settings.settings_master_key).decrypt(ciphertext).strip()
+    except Exception:  # noqa: BLE001
+        return ""
+    if secret:
+        object.__setattr__(backend_settings, "users_secret", secret)
+    return secret
 
 
 # ── Current user access ──────────────────────────────────────────────
@@ -318,6 +345,7 @@ async def change_password(
 async def generate_api_token(
     payload: GenerateApiTokenRequest,
     user: Annotated[User, Depends(current_active_user)],
+    session: AsyncSession = Depends(get_db_session),
 ) -> ApiTokenResponse:
     """Generate a JWT token for the LLM API gateway.
 
@@ -329,22 +357,24 @@ async def generate_api_token(
 
     import jwt as pyjwt  # noqa: PLC0415
 
-    from llm_port_backend.settings import settings as backend_settings  # noqa: PLC0415
-
-    if not backend_settings.users_secret:
+    secret = await _resolve_users_secret(session)
+    if not secret:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="JWT secret is not configured. Set 'Backend Users JWT Secret' in System Settings.",
         )
 
+    now = int(time.time())
     claims: dict = {
         "sub": str(user.id),
         "tenant_id": payload.tenant_id,
         "email": user.email,
-        "iat": int(time.time()),
+        "iat": now,
+        # Prevent deterministic duplicate tokens if generated in the same second.
+        "jti": uuid.uuid4().hex,
     }
     if payload.expires_in is not None:
-        claims["exp"] = int(time.time()) + payload.expires_in
+        claims["exp"] = now + payload.expires_in
 
-    token = pyjwt.encode(claims, backend_settings.users_secret, algorithm="HS256")
+    token = pyjwt.encode(claims, secret, algorithm="HS256")
     return ApiTokenResponse(token=token, expires_in=payload.expires_in)

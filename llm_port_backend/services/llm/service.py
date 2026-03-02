@@ -57,6 +57,7 @@ class LLMService:
         target: ProviderTarget = ProviderTarget.LOCAL_DOCKER,
         endpoint_url: str | None = None,
         api_key: str | None = None,
+        remote_model: str | None = None,
     ) -> LLMProvider:
         """Register a new LLM engine provider.
 
@@ -72,6 +73,8 @@ class LLMService:
         capabilities = adapter.default_capabilities()
         if target == ProviderTarget.REMOTE_ENDPOINT:
             capabilities["remote"] = True
+            if remote_model and remote_model.strip():
+                capabilities["remote_model"] = remote_model.strip()
 
         return await provider_dao.create(
             name=name,

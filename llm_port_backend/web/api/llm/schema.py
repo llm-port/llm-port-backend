@@ -39,6 +39,11 @@ class ProviderCreateRequest(BaseModel):
         max_length=512,
         description="Optional API key for authenticating with the remote endpoint.",
     )
+    remote_model: str | None = Field(
+        None,
+        max_length=256,
+        description="Optional default model name for remote providers (metadata/display only).",
+    )
 
 
 class TestEndpointRequest(BaseModel):
@@ -63,6 +68,7 @@ class ProviderUpdateRequest(BaseModel):
     capabilities: dict | None = None
     endpoint_url: str | None = Field(None, max_length=1024)
     api_key: str | None = Field(None, max_length=512)
+    remote_model: str | None = Field(None, max_length=256)
 
 
 class ProviderDTO(BaseModel):
@@ -74,6 +80,7 @@ class ProviderDTO(BaseModel):
     target: ProviderTarget
     endpoint_url: str | None = None
     capabilities: dict | None = None
+    remote_model: str | None = None
     created_at: datetime
     updated_at: datetime
 
