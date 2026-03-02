@@ -1,14 +1,18 @@
 """GPU auto-detection — discovers installed GPUs across vendors.
 
-Detection strategies (executed in order):
-1. **pynvml** — NVIDIA GPUs on any OS.
+Detection strategies are combined so that **all** GPUs are reported,
+even on multi-vendor laptops (e.g. AMD iGPU + NVIDIA dGPU):
+
+1. **pynvml** — NVIDIA GPUs on any OS (rich data: VRAM, driver, etc.).
 2. **ROCm sysfs** — AMD GPUs on Linux with ROCm installed.
 3. **Windows WMI / registry** — any GPU on Windows 10+.
-4. **macOS system_profiler** — Apple GPUs on macOS (future).
-5. Falls back to an empty inventory.
+4. **macOS system_profiler** — Apple GPUs on macOS.
+5. **Intel sysfs** — Intel GPUs on Linux.
 
-The result is cached for the lifetime of the process because GPU
-hardware doesn't change at runtime.
+Results from all applicable strategies are merged and de-duplicated so
+that a laptop with an AMD iGPU and an NVIDIA dGPU correctly reports
+both.  The result is cached but can be refreshed via
+:func:`redetect_gpus`.
 """
 
 from __future__ import annotations
@@ -36,45 +40,74 @@ logger = logging.getLogger(__name__)
 
 @functools.lru_cache(maxsize=1)
 def detect_gpus() -> GpuInventory:
-    """Auto-detect all GPUs on the host.
+    """Auto-detect **all** GPUs on the host.
+
+    Runs every applicable detection strategy and merges the results so
+    multi-vendor setups (e.g. AMD iGPU + NVIDIA dGPU) are fully
+    reported.
 
     Returns a cached :class:`GpuInventory` with one :class:`GpuDevice`
     per physical GPU found.  The ``primary_vendor`` and
-    ``primary_compute_api`` are derived from the first device.
+    ``primary_compute_api`` are derived from the most capable device
+    (discrete NVIDIA/AMD preferred over integrated).
+
+    Use :func:`redetect_gpus` to clear the cache and re-run detection
+    (e.g. after a GPU is powered on or a driver is installed).
     """
     devices: list[GpuDevice] = []
 
-    # Strategy 1: NVIDIA (pynvml)
-    devices = _detect_nvidia()
-    if devices:
-        return _build_inventory(devices)
+    # Strategy 1: NVIDIA (pynvml) — works on any OS with NVIDIA drivers
+    nvidia_devices = _detect_nvidia()
+    devices.extend(nvidia_devices)
 
     # Strategy 2: AMD ROCm (Linux sysfs)
     if sys.platform == "linux":
-        devices = _detect_amd_rocm()
-        if devices:
-            return _build_inventory(devices)
+        amd_devices = _detect_amd_rocm()
+        devices.extend(amd_devices)
 
-    # Strategy 3: Windows (WMI + DX diagnostics)
+    # Strategy 3: Windows (WMI + DX diagnostics) — detects all vendors
     if sys.platform == "win32":
-        devices = _detect_windows_wmi()
-        if devices:
-            return _build_inventory(devices)
+        wmi_devices = _detect_windows_wmi()
+        devices = _merge_device_lists(devices, wmi_devices)
 
     # Strategy 4: macOS (system_profiler)
     if sys.platform == "darwin":
-        devices = _detect_macos()
-        if devices:
-            return _build_inventory(devices)
+        mac_devices = _detect_macos()
+        devices = _merge_device_lists(devices, mac_devices)
 
-    # Strategy 5: Fallback — try Intel on Linux
+    # Strategy 5: Intel on Linux (sysfs)
     if sys.platform == "linux":
-        devices = _detect_intel_linux()
-        if devices:
-            return _build_inventory(devices)
+        intel_devices = _detect_intel_linux()
+        devices.extend(intel_devices)
 
-    logger.info("No GPUs detected on this host")
-    return GpuInventory()
+    if not devices:
+        logger.info("No GPUs detected on this host")
+        return GpuInventory()
+
+    # Re-index devices sequentially
+    reindexed = [
+        GpuDevice(
+            index=i,
+            vendor=d.vendor,
+            model=d.model,
+            vram_bytes=d.vram_bytes,
+            driver_version=d.driver_version,
+            compute_api=d.compute_api,
+        )
+        for i, d in enumerate(devices)
+    ]
+
+    return _build_inventory(reindexed)
+
+
+def redetect_gpus() -> GpuInventory:
+    """Clear the detection cache and re-run GPU discovery.
+
+    Useful after hardware state changes such as enabling a discrete GPU
+    from power-saving mode or installing GPU drivers.
+    """
+    detect_gpus.cache_clear()
+    return detect_gpus()
 
 
 # ── Strategy 1: NVIDIA pynvml ─────────────────────────────────────────
@@ -457,15 +490,62 @@ def _detect_intel_linux() -> list[GpuDevice]:
     return devices
 
 
-# ── Internal helper ───────────────────────────────────────────────────
+# ── Internal helpers ──────────────────────────────────────────────────
+
+# Priority order for choosing the "primary" vendor in multi-GPU systems.
+# Discrete compute GPUs (NVIDIA CUDA, AMD ROCm) outrank integrated.
+_VENDOR_PRIORITY: dict[GpuVendor, int] = {
+    GpuVendor.NVIDIA: 4,
+    GpuVendor.AMD: 3,
+    GpuVendor.INTEL: 2,
+    GpuVendor.APPLE: 1,
+    GpuVendor.UNKNOWN: 0,
+}
+
+
+def _merge_device_lists(
+    existing: list[GpuDevice],
+    new: list[GpuDevice],
+) -> list[GpuDevice]:
+    """Merge *new* devices into *existing*, skipping duplicates.
+
+    Two devices are considered duplicates when they share the same
+    vendor and their model names overlap (case-insensitive substring
+    match).  When a duplicate is found the entry with **more VRAM info**
+    (typically from a vendor-specific tool like pynvml) is kept.
+    """
+    merged = list(existing)
+    for nd in new:
+        nd_model = nd.model.lower().strip()
+        duplicate = False
+        for i, ed in enumerate(merged):
+            ed_model = ed.model.lower().strip()
+            if nd.vendor != ed.vendor:
+                continue
+            # Fuzzy model-name match: one name is a substring of the other
+            if nd_model in ed_model or ed_model in nd_model:
+                duplicate = True
+                # Keep whichever has richer data (prefer pynvml over WMI)
+                if nd.vram_bytes > ed.vram_bytes:
+                    merged[i] = nd
+                break
+        if not duplicate:
+            merged.append(nd)
+    return merged
 
 
 def _build_inventory(devices: list[GpuDevice]) -> GpuInventory:
-    """Build a :class:`GpuInventory` from a list of devices."""
-    primary_vendor = devices[0].vendor if devices else GpuVendor.UNKNOWN
-    primary_compute = devices[0].compute_api if devices else GpuComputeApi.UNKNOWN
+    """Build a :class:`GpuInventory` from a list of devices.
+
+    When multiple vendors are present the *primary* vendor is the one
+    with the highest priority (discrete compute GPUs preferred).
+    """
+    if not devices:
+        return GpuInventory()
+
+    best = max(devices, key=lambda d: (_VENDOR_PRIORITY.get(d.vendor, 0), d.vram_bytes))
     return GpuInventory(
         devices=devices,
-        primary_vendor=primary_vendor,
-        primary_compute_api=primary_compute,
+        primary_vendor=best.vendor,
+        primary_compute_api=best.compute_api,
     )

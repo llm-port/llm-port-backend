@@ -14,7 +14,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends
 
 from llm_port_backend.db.models.users import User
-from llm_port_backend.services.gpu.detector import detect_gpus
+from llm_port_backend.services.gpu.detector import detect_gpus, redetect_gpus
 from llm_port_backend.services.gpu.metrics import collect_gpu_metrics
 from llm_port_backend.settings import settings
 from llm_port_backend.web.api.admin.dependencies import require_superuser
@@ -185,3 +185,21 @@ async def hardware_info(
         legacy_vllm_image=settings.default_vllm_legacy_image,
         vllm_image_presets=presets,
     )
+
+
+@router.post(
+    "/rescan",
+    response_model=HardwareDTO,
+    name="admin_hardware_rescan",
+    summary="Re-detect host GPU hardware (clears cache)",
+)
+async def hardware_rescan(
+    _user: Annotated[User, Depends(require_superuser)] = None,  # type: ignore[assignment]
+) -> HardwareDTO:
+    """Clear the GPU detection cache and re-run discovery.
+
+    Useful after enabling a discrete GPU from power-saving mode,
+    installing new GPU drivers, or plugging in an eGPU.
+    """
+    redetect_gpus()
+    return await hardware_info(_user)

@@ -17,6 +17,8 @@ Docker Engine API host-config fields:
 from __future__ import annotations
 
 import logging
+import sys
+from pathlib import Path
 from typing import Any
 
 from llm_port_backend.services.gpu.types import GpuVendor
@@ -98,8 +100,34 @@ def _amd_config(gpu_devices: str | list[int]) -> dict[str, Any]:
     - ``/dev/dri/renderD*`` — DRM render nodes (one per GPU).
     - Groups ``video`` and ``render`` for device file access.
     - ``seccomp=unconfined`` for ROCm's memory management.
+
+    On non-Linux hosts (e.g. Windows with Docker Desktop) the raw
+    device paths do not exist, so device mounts are skipped and
+    only the environment / security options are applied.
     """
-    devices: list[str] = ["/dev/kfd"]
+    if sys.platform != "linux":
+        logger.warning(
+            "AMD ROCm GPU passthrough uses Linux device mounts "
+            "(/dev/kfd, /dev/dri) which are not available on %s. "
+            "The container will start without GPU device mounts. "
+            "For ROCm on Windows, ensure the ROCm-capable image "
+            "is built for CPU-fallback or use WSL2 natively.",
+            sys.platform,
+        )
+        return {
+            "SecurityOpt": ["seccomp=unconfined"],
+        }
+
+    devices: list[str] = []
+
+    # /dev/kfd may be absent if the ROCm kernel driver is not loaded
+    if Path("/dev/kfd").exists():
+        devices.append("/dev/kfd")
+    else:
+        logger.warning(
+            "/dev/kfd not found — the ROCm kernel driver (amdgpu) may "
+            "not be loaded.  AMD GPU compute may not work."
+        )
 
     if gpu_devices == "all":
         # Expose all render nodes
@@ -113,11 +141,16 @@ def _amd_config(gpu_devices: str | list[int]) -> dict[str, Any]:
         for idx in gpu_devices:
             devices.append(f"/dev/dri/card{idx}")
 
-    return {
-        "Devices": [{"PathOnHost": d, "PathInContainer": d, "CgroupPermissions": "rwm"} for d in devices],
+    result: dict[str, Any] = {
         "GroupAdd": ["video", "render"],
         "SecurityOpt": ["seccomp=unconfined"],
     }
+    if devices:
+        result["Devices"] = [
+            {"PathOnHost": d, "PathInContainer": d, "CgroupPermissions": "rwm"}
+            for d in devices
+        ]
+    return result
 
 
 def _intel_config(gpu_devices: str | list[int]) -> dict[str, Any]:
@@ -125,7 +158,19 @@ def _intel_config(gpu_devices: str | list[int]) -> dict[str, Any]:
 
     Intel GPUs (Arc, Flex, Data Center Max) use the i915 or xe kernel
     driver.  Exposing ``/dev/dri`` is usually sufficient.
+
+    On non-Linux hosts the device paths do not exist, so device mounts
+    are skipped.
     """
+    if sys.platform != "linux":
+        logger.warning(
+            "Intel GPU passthrough uses Linux device mounts (/dev/dri) "
+            "which are not available on %s.  The container will start "
+            "without GPU device mounts.",
+            sys.platform,
+        )
+        return {}
+
     devices: list[str] = []
 
     if gpu_devices == "all":
@@ -135,7 +180,12 @@ def _intel_config(gpu_devices: str | list[int]) -> dict[str, Any]:
             devices.append(f"/dev/dri/renderD{128 + idx}")
             devices.append(f"/dev/dri/card{idx}")
 
-    return {
-        "Devices": [{"PathOnHost": d, "PathInContainer": d, "CgroupPermissions": "rwm"} for d in devices],
+    result: dict[str, Any] = {
         "GroupAdd": ["video", "render"],
     }
+    if devices:
+        result["Devices"] = [
+            {"PathOnHost": d, "PathInContainer": d, "CgroupPermissions": "rwm"}
+            for d in devices
+        ]
+    return result
