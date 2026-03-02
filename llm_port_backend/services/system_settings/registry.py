@@ -179,6 +179,47 @@ SETTINGS_REGISTRY: tuple[SettingDefinition, ...] = (
         apply_scope=SystemApplyScope.LIVE_RELOAD,
         service_targets=("llm-port-backend",),
     ),
+    # ── PII module settings ─────────────────────────────────────
+    SettingDefinition(
+        key="llm_port_api.pii_enabled",
+        type="bool",
+        category="modules",
+        group="pii",
+        label="PII Module Enabled",
+        description="Enable PII detection and redaction via the PII service.",
+        is_secret=False,
+        default=False,
+        apply_scope=SystemApplyScope.SERVICE_RESTART,
+        service_targets=("llm-port-api",),
+    ),
+    SettingDefinition(
+        key="llm_port_api.pii_service_url",
+        type="string",
+        category="modules",
+        group="pii",
+        label="PII Service URL",
+        description="Internal URL of the PII micro-service (e.g. http://llm-port-pii:8000 in Docker, http://127.0.0.1:8003/api in dev).",
+        is_secret=False,
+        default="",
+        apply_scope=SystemApplyScope.SERVICE_RESTART,
+        service_targets=("llm-port-api",),
+    ),
+    SettingDefinition(
+        key="llm_port_api.pii_default_policy",
+        type="json",
+        category="modules",
+        group="pii",
+        label="Default PII Policy",
+        description=(
+            "Default PII policy JSON applied when no tenant-specific policy exists. "
+            "Structure: {telemetry: {enabled, mode}, egress: {enabled_for_cloud, mode, fail_action}, "
+            "presidio: {language, threshold, entities}}"
+        ),
+        is_secret=False,
+        default={},
+        apply_scope=SystemApplyScope.SERVICE_RESTART,
+        service_targets=("llm-port-api",),
+    ),
 )
 
 
