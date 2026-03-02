@@ -496,7 +496,14 @@
     "health_unavailable": "健康检查不可用。",
     "container_logs": "容器日志（最近 300 行）",
     "no_logs": "暂无日志。",
-    "page_title": "运行时详情"
+    "page_title": "运行时详情",
+    "edit_config": "编辑配置",
+    "max_model_len_help": "模型处理的最大序列长度（如 4096）。留空使用模型默认值。",
+    "extra_args": "额外参数",
+    "extra_args_help": "传递给运行时引擎的额外命令行参数（每行一个，如 --enforce-eager）。",
+    "save_and_restart": "保存并重启",
+    "enforce_eager": "旧款 GPU 支持（为计算能力 < 8.0 的 GPU 启用 XFormers 后端，如 TITAN RTX、V100、GTX 10xx/20xx 系列）",
+    "swap_space_help": "每个 GPU 用于卸载的 CPU 交换空间（GiB，如 4）。留空使用 vLLM 默认值（旧款 GPU 模式下默认为 1 GiB）。"
   },
   "llm_jobs": {
     "title": "下载任务",

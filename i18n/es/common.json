@@ -496,7 +496,14 @@
     "health_unavailable": "Health check unavailable.",
     "container_logs": "Container Logs (last 300 lines)",
     "no_logs": "No logs available.",
-    "page_title": "Detalles del Runtime"
+    "page_title": "Detalles del Runtime",
+    "edit_config": "Editar configuracion",
+    "max_model_len_help": "Longitud maxima de secuencia que manejara el modelo (p. ej. 4096). Dejar en blanco para el valor predeterminado del modelo.",
+    "extra_args": "Argumentos adicionales",
+    "extra_args_help": "Argumentos de linea de comandos adicionales para el motor de runtime (uno por linea, p. ej. --enforce-eager).",
+    "save_and_restart": "Guardar y reiniciar",
+    "enforce_eager": "Soporte para GPUs antiguas (backend XFormers para capacidad de computo < 8.0 — p. ej. TITAN RTX, V100, serie GTX 10xx/20xx)",
+    "swap_space_help": "Espacio de intercambio de CPU por GPU en GiB (p. ej. 4). Dejar en blanco para el valor predeterminado de vLLM (1 GiB en modo GPU legacy)."
   },
   "llm_jobs": {
     "title": "Download Jobs",

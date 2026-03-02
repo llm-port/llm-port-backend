@@ -135,13 +135,22 @@ class VLLMAdapter(ProviderAdapter):
         # Generic config → vLLM flags
         if max_model_len := gc.get("max_model_len"):
             cmd += ["--max-model-len", str(max_model_len)]
-        if dtype := gc.get("dtype"):
+        # Legacy GPUs (CC < 8.0) don't support bfloat16; default to float16
+        # when enforce_eager is set and the user hasn't specified a dtype.
+        dtype = gc.get("dtype") or ("float16" if enforce_eager else None)
+        if dtype:
             cmd += ["--dtype", dtype]
         if gpu_mem := gc.get("gpu_memory_utilization"):
             cmd += ["--gpu-memory-utilization", str(gpu_mem)]
         if tp := gc.get("tensor_parallel_size"):
             cmd += ["--tensor-parallel-size", str(tp)]
-        if (swap_space := gc.get("swap_space")) is not None:
+        # Legacy mode runs inside Docker Desktop (WSL2) which typically has
+        # only ~4 GiB of RAM.  Default to 1 GiB swap to avoid OOM during
+        # model loading; the user can override by setting swap_space explicitly.
+        swap_space = gc.get("swap_space")
+        if swap_space is None and enforce_eager:
+            swap_space = 1
+        if swap_space is not None:
             cmd += ["--swap-space", str(swap_space)]
         if gc.get("enable_metrics"):
             cmd += ["--enable-metrics"]
@@ -157,8 +166,11 @@ class VLLMAdapter(ProviderAdapter):
         # ── Enforce eager mode ────────────────────────────────────────
         # enforce_eager is resolved earlier (before image selection).
         # Add the CLI flag here; legacy image handles the rest.
+        # Also disable ZMQ-based frontend multiprocessing: Docker Desktop
+        # (WSL2) does not support epoll on ZMQ IPC sockets, causing a
+        # ZMQError: Operation not supported crash right after model load.
         if enforce_eager:
-            cmd += ["--enforce-eager"]
+            cmd += ["--enforce-eager", "--disable-frontend-multiprocessing"]
 
         # Provider overlay → extra args
         if extra_args := pc.get("extra_args"):

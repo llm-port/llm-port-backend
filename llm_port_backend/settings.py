@@ -88,7 +88,9 @@ class Settings(BaseSettings):
     default_vllm_rocm_image: str = "vllm/vllm-openai:latest-rocm"
     # Legacy image for GPUs with compute capability < 8.0 (Turing/Volta).
     # vLLM >= 0.7 uses the V1 engine which only supports FA2 (CC >= 8.0).
-    # v0.6.6 uses the V0 engine with XFormers support (CC >= 7.0).
+    # v0.6.6 uses V0 engine + XFormers (CC >= 7.0) and works in Docker
+    # Desktop (WSL2) with --disable-frontend-multiprocessing to avoid
+    # ZMQ epoll issues (ZMQError: Operation not supported).
     default_vllm_legacy_image: str = "vllm/vllm-openai:v0.6.6"
 
     # JSON-encoded list of additional vLLM image presets.

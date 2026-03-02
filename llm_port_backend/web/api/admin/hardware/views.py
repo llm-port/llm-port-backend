@@ -42,6 +42,13 @@ _BUILTIN_PRESETS: list[dict[str, Any]] = [
         "is_default": True,
     },
     {
+        "label": "vLLM Legacy (CUDA, CC ≥ 7.0)",
+        "image": settings.default_vllm_legacy_image,
+        "vendor": "nvidia_legacy",
+        "description": "vLLM V0 engine + XFormers — for GPUs older than Ampere (CC < 8.0), e.g. TITAN RTX, V100, GTX 10xx/20xx.",
+        "is_default": False,
+    },
+    {
         "label": "vLLM (ROCm)",
         "image": settings.default_vllm_rocm_image,
         "vendor": "amd",
@@ -175,5 +182,6 @@ async def hardware_info(
         gpu=gpu_dto,
         gpu_metrics=metrics_dto,
         recommended_vllm_image=recommended_image,
+        legacy_vllm_image=settings.default_vllm_legacy_image,
         vllm_image_presets=presets,
     )

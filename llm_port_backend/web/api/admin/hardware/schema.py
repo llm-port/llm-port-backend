@@ -57,4 +57,5 @@ class HardwareDTO(BaseModel):
     gpu: GpuInventoryDTO
     gpu_metrics: GpuMetricsDTO
     recommended_vllm_image: str | None = None
+    legacy_vllm_image: str | None = None
     vllm_image_presets: list[VllmImagePresetDTO] = Field(default_factory=list)

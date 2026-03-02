@@ -503,8 +503,8 @@
     "extra_args": "Extra Arguments",
     "extra_args_help": "Additional command-line arguments passed to the runtime engine (one per line, e.g. --enforce-eager).",
     "save_and_restart": "Save & Restart",
-    "enforce_eager": "Enforce eager mode (disable FlashAttention / CUDA graphs — required for GPUs older than Ampere)",
-    "swap_space_help": "CPU swap space per GPU in GiB for offloading (e.g. 4). Leave blank for vLLM default."
+    "enforce_eager": "Legacy GPU support (uses XFormers backend for compute capability < 8.0 — e.g. TITAN RTX, V100, GTX 10xx/20xx)",
+    "swap_space_help": "CPU swap space per GPU in GiB (e.g. 4). Leave blank for vLLM default (1 GiB in legacy GPU mode)."
   },
   "llm_jobs": {
     "title": "Download Jobs",

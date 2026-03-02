@@ -496,7 +496,14 @@
     "health_unavailable": "Health-Check nicht verfuegbar.",
     "container_logs": "Container-Logs (letzte 300 Zeilen)",
     "no_logs": "Keine Logs verfuegbar.",
-    "page_title": "Runtime-Details"
+    "page_title": "Runtime-Details",
+    "edit_config": "Konfiguration bearbeiten",
+    "max_model_len_help": "Maximale Sequenzlaenge, die das Modell verarbeitet (z. B. 4096). Leer lassen fuer Modell-Standard.",
+    "extra_args": "Zusaetzliche Argumente",
+    "extra_args_help": "Weitere Befehlszeilenargumente fuer die Runtime-Engine (eines pro Zeile, z. B. --enforce-eager).",
+    "save_and_restart": "Speichern & Neustart",
+    "enforce_eager": "Unterstuetzung fuer aeltere GPUs (XFormers-Backend fuer Rechenkapazitaet < 8.0 — z. B. TITAN RTX, V100, GTX 10xx/20xx)",
+    "swap_space_help": "CPU-Swap-Speicher pro GPU in GiB zum Auslagern (z. B. 4). Leer lassen fuer vLLM-Standard (1 GiB im Legacy-GPU-Modus)."
   },
   "llm_jobs": {
     "title": "Download-Jobs",
