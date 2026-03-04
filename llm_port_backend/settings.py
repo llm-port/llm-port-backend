@@ -134,6 +134,10 @@ class Settings(BaseSettings):
     mailer_from_email: str = "noreply@llm-port.local"
     mailer_from_name: str = "LLM Port"
 
+    # External Auth module settings (enterprise SSO)
+    auth_enabled: bool = False
+    auth_service_url: str = "http://127.0.0.1:8005"
+
     # Admin dashboard / Grafana embedding settings
     grafana_url: str | None = Field(
         default=None,

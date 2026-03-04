@@ -1,4 +1,16 @@
-"""Admin auth-provider management and OAuth callback endpoints."""
+"""Admin auth-provider management and OAuth callback endpoints.
+
+When the external auth module is enabled (``settings.auth_enabled``),
+provider CRUD calls are forwarded to the ``llm_port_auth`` micro-
+service.  OAuth ``authorize`` redirects to the auth module which
+handles the full IdP exchange and sends signed ``OAuthUserClaims``
+back to the ``/external-callback`` endpoint here, where we
+find-or-create the user and issue a JWT cookie.
+
+When the auth module is **disabled**, the routes still exist but
+return empty lists / 404 — keeping the API shape stable so the front-
+end doesn't break.
+"""
 
 from __future__ import annotations
 
@@ -6,13 +18,16 @@ import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+import httpx
+import jwt
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from starlette import status
 
 from llm_port_backend.db.dao.auth_provider_dao import AuthProviderDAO
-from llm_port_backend.db.models.oauth import AuthProvider
+from llm_port_backend.db.models.oauth import AuthProvider, OAuthAccount
 from llm_port_backend.db.models.users import User, get_jwt_strategy
+from llm_port_backend.settings import settings
 from llm_port_backend.web.api.admin.auth_providers.schema import (
     AuthProviderDTO,
     AuthProviderPublicDTO,
@@ -27,38 +42,70 @@ router = APIRouter()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Secret encryption helpers (Fernet-based symmetric encryption)
+#  Proxy helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+_AUTH_API_TIMEOUT = 15.0
+
+
+def _auth_base() -> str:
+    """Return the base URL for the auth module's providers API."""
+    return f"{settings.auth_service_url.rstrip('/')}/api/providers"
+
+
+async def _proxy_get(path: str) -> httpx.Response:
+    async with httpx.AsyncClient(timeout=_AUTH_API_TIMEOUT) as client:
+        return await client.get(f"{_auth_base()}{path}")
+
+
+async def _proxy_post(path: str, payload: dict) -> httpx.Response:
+    async with httpx.AsyncClient(timeout=_AUTH_API_TIMEOUT) as client:
+        return await client.post(f"{_auth_base()}{path}", json=payload)
+
+
+async def _proxy_patch(path: str, payload: dict) -> httpx.Response:
+    async with httpx.AsyncClient(timeout=_AUTH_API_TIMEOUT) as client:
+        return await client.patch(f"{_auth_base()}{path}", json=payload)
+
+
+async def _proxy_delete(path: str) -> httpx.Response:
+    async with httpx.AsyncClient(timeout=_AUTH_API_TIMEOUT) as client:
+        return await client.delete(f"{_auth_base()}{path}")
+
+
+def _forward_or_raise(resp: httpx.Response):
+    """Raise an HTTPException mirroring the upstream status on error."""
+    if resp.status_code >= 400:  # noqa: PLR2004
+        try:
+            detail = resp.json().get("detail", resp.text)
+        except Exception:
+            detail = resp.text
+        raise HTTPException(status_code=resp.status_code, detail=detail)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Local-mode helpers (kept for fallback / CE mode)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 def _get_fernet():
     """Return a Fernet instance derived from the users_secret setting."""
-    import base64
-    import hashlib
+    import base64  # noqa: PLC0415
+    import hashlib  # noqa: PLC0415
 
-    from cryptography.fernet import Fernet
+    from cryptography.fernet import Fernet  # noqa: PLC0415
 
-    from llm_port_backend.settings import settings
-
-    # Derive a 32-byte key from users_secret (which may be arbitrary length)
     key_bytes = hashlib.sha256(settings.users_secret.encode()).digest()
     fernet_key = base64.urlsafe_b64encode(key_bytes)
     return Fernet(fernet_key)
 
 
 def _encrypt_secret(plaintext: str) -> str:
-    """Encrypt a client secret for storage."""
     return _get_fernet().encrypt(plaintext.encode()).decode()
 
 
 def _decrypt_secret(ciphertext: str) -> str:
-    """Decrypt a stored client secret."""
     return _get_fernet().decrypt(ciphertext.encode()).decode()
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# DTO helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 def _provider_to_dto(provider: AuthProvider) -> AuthProviderDTO:
@@ -82,7 +129,7 @@ def _provider_to_dto(provider: AuthProvider) -> AuthProviderDTO:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Public endpoint: enabled providers (for login page)
+#  Public endpoint: enabled providers (login page)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -94,20 +141,20 @@ def _provider_to_dto(provider: AuthProvider) -> AuthProviderDTO:
 async def list_enabled_providers(
     provider_dao: AuthProviderDAO = Depends(),
 ) -> list[AuthProviderPublicDTO]:
-    """List enabled providers — no auth required (login page needs this)."""
+    """List enabled providers — unauthenticated (login page)."""
+    if settings.auth_enabled:
+        resp = await _proxy_get("/public")
+        _forward_or_raise(resp)
+        return resp.json()
     providers = await provider_dao.list_enabled_providers()
     return [
-        AuthProviderPublicDTO(
-            id=p.id,
-            name=p.name,
-            provider_type=p.provider_type,
-        )
+        AuthProviderPublicDTO(id=p.id, name=p.name, provider_type=p.provider_type)
         for p in providers
     ]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Admin CRUD
+#  Admin CRUD
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -117,6 +164,10 @@ async def list_auth_providers(
     provider_dao: AuthProviderDAO = Depends(),
 ) -> list[AuthProviderDTO]:
     """List all configured auth providers."""
+    if settings.auth_enabled:
+        resp = await _proxy_get("/")
+        _forward_or_raise(resp)
+        return resp.json()
     providers = await provider_dao.list_providers()
     return [_provider_to_dto(p) for p in providers]
 
@@ -128,6 +179,10 @@ async def get_auth_provider(
     provider_dao: AuthProviderDAO = Depends(),
 ) -> AuthProviderDTO:
     """Get a single auth provider by ID."""
+    if settings.auth_enabled:
+        resp = await _proxy_get(f"/{provider_id}")
+        _forward_or_raise(resp)
+        return resp.json()
     provider = await provider_dao.get_provider_by_id(provider_id)
     if provider is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
@@ -146,6 +201,10 @@ async def create_auth_provider(
     provider_dao: AuthProviderDAO = Depends(),
 ) -> AuthProviderDTO:
     """Create a new auth provider."""
+    if settings.auth_enabled:
+        resp = await _proxy_post("/", payload.model_dump())
+        _forward_or_raise(resp)
+        return resp.json()
     existing = await provider_dao.get_provider_by_name(payload.name)
     if existing:
         raise HTTPException(
@@ -178,6 +237,13 @@ async def update_auth_provider(
     provider_dao: AuthProviderDAO = Depends(),
 ) -> AuthProviderDTO:
     """Update an auth provider."""
+    if settings.auth_enabled:
+        resp = await _proxy_patch(
+            f"/{provider_id}",
+            payload.model_dump(exclude_none=True),
+        )
+        _forward_or_raise(resp)
+        return resp.json()
     existing = await provider_dao.get_provider_by_id(provider_id)
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
@@ -225,6 +291,10 @@ async def delete_auth_provider(
     provider_dao: AuthProviderDAO = Depends(),
 ) -> None:
     """Delete an auth provider."""
+    if settings.auth_enabled:
+        resp = await _proxy_delete(f"/{provider_id}")
+        _forward_or_raise(resp)
+        return
     existing = await provider_dao.get_provider_by_id(provider_id)
     if existing is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
@@ -232,7 +302,7 @@ async def delete_auth_provider(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# OAuth flow endpoints (authorize redirect + callback)
+#  OAuth flow endpoints
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -245,7 +315,17 @@ async def oauth_authorize(
     request: Request,
     provider_dao: AuthProviderDAO = Depends(),
 ) -> RedirectResponse:
-    """Redirect the user to the external OAuth/OIDC provider for login."""
+    """Redirect the user to the external IdP for login.
+
+    When the auth module is enabled, redirect to its authorize endpoint
+    so it handles the full OAuth exchange.
+    """
+    if settings.auth_enabled:
+        # Redirect the browser directly to the auth module's authorize
+        redirect_url = f"{_auth_base()}/{provider_id}/authorize"
+        return RedirectResponse(redirect_url)
+
+    # ── Local mode (no auth module) ───────────────────────────────────
     from httpx_oauth.clients.openid import OpenID  # noqa: PLC0415
 
     provider = await provider_dao.get_provider_by_id(provider_id)
@@ -295,13 +375,12 @@ async def oauth_callback(
     request: Request,
     provider_dao: AuthProviderDAO = Depends(),
 ) -> RedirectResponse:
-    """Handle the OAuth callback, exchange code for token, create/login user."""
-    import httpx  # noqa: PLC0415
-    from sqlalchemy import select  # noqa: PLC0415
+    """Handle the OAuth callback (local mode only).
 
-    from llm_port_backend.db.dao.rbac_dao import RbacDAO  # noqa: PLC0415
-    from llm_port_backend.db.models.oauth import OAuthAccount  # noqa: PLC0415
-
+    When the auth module is enabled, this endpoint is never hit — the
+    IdP redirects to the auth module's callback which then calls
+    ``external-callback`` below.
+    """
     provider = await provider_dao.get_provider_by_id(provider_id)
     if provider is None or not provider.enabled:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider not found")
@@ -349,7 +428,6 @@ async def oauth_callback(
     try:
         userinfo_url = provider.userinfo_url
         if not userinfo_url and provider.provider_type == "oidc" and provider.discovery_url:
-            # Try to get userinfo from OIDC discovery
             async with httpx.AsyncClient() as http:
                 disc = await http.get(provider.discovery_url)
                 disc_data = disc.json()
@@ -371,8 +449,93 @@ async def oauth_callback(
     if not account_email:
         return RedirectResponse("/login?error=no_email")
 
-    # Get the DB session from the DAO's session
-    session = provider_dao.session
+    # Reuse the shared _process_oauth_login helper
+    return await _process_oauth_login(
+        session=provider_dao.session,
+        request=request,
+        provider_name=provider.name,
+        account_id=str(account_id),
+        account_email=account_email,
+        access_token=access_token,
+        expires_at=token.get("expires_at"),
+        refresh_token=token.get("refresh_token"),
+        auto_register=provider.auto_register,
+        default_role_ids=[str(rid) for rid in (provider.default_role_ids or [])],
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  External callback — receives signed claims from the auth module
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/external-callback",
+    name="oauth_external_callback",
+)
+async def oauth_external_callback(
+    token: str,
+    request: Request,
+    provider_dao: AuthProviderDAO = Depends(),
+) -> RedirectResponse:
+    """Receive signed OAuthUserClaims from the auth module.
+
+    The auth module performs the full OAuth exchange and then redirects
+    the user's browser here with a short-lived JWT.  We verify the
+    signature, find-or-create the user, and issue a session cookie.
+    """
+    # Verify the signed token
+    try:
+        claims = jwt.decode(
+            token,
+            settings.users_secret,
+            algorithms=["HS256"],
+            issuer="llm-port-auth",
+        )
+    except jwt.ExpiredSignatureError:
+        logger.warning("External callback token expired")
+        return RedirectResponse("/login?error=token_expired")
+    except jwt.InvalidTokenError:
+        logger.warning("External callback token invalid")
+        return RedirectResponse("/login?error=invalid_token")
+
+    return await _process_oauth_login(
+        session=provider_dao.session,
+        request=request,
+        provider_name=claims["provider_name"],
+        account_id=claims.get("account_id", ""),
+        account_email=claims["account_email"],
+        access_token=claims.get("access_token", ""),
+        expires_at=claims.get("expires_at"),
+        refresh_token=claims.get("refresh_token"),
+        auto_register=claims.get("auto_register", True),
+        default_role_ids=claims.get("default_role_ids", []),
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Shared login logic (local mode + external callback)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+async def _process_oauth_login(
+    *,
+    session,
+    request: Request,
+    provider_name: str,
+    account_id: str,
+    account_email: str,
+    access_token: str,
+    expires_at: int | None,
+    refresh_token: str | None,
+    auto_register: bool,
+    default_role_ids: list[str],
+) -> RedirectResponse:
+    """Find-or-create a user from OAuth claims and issue a JWT cookie."""
+    from sqlalchemy import select  # noqa: PLC0415
+    from sqlalchemy.dialects.postgresql import insert as pg_insert  # noqa: PLC0415
+
+    from llm_port_backend.db.dao.rbac_dao import RbacDAO  # noqa: PLC0415
 
     # Find or create the user
     user_result = await session.execute(
@@ -381,16 +544,15 @@ async def oauth_callback(
     user = user_result.scalar_one_or_none()
 
     if user is None:
-        if not provider.auto_register:
+        if not auto_register:
             return RedirectResponse("/login?error=registration_disabled")
 
         from fastapi_users.password import PasswordHelper  # noqa: PLC0415
 
-        # Auto-register user
         user = User(
             id=uuid.uuid4(),
             email=account_email,
-            hashed_password=PasswordHelper().hash(uuid.uuid4().hex),  # random unusable password
+            hashed_password=PasswordHelper().hash(uuid.uuid4().hex),
             is_active=True,
             is_superuser=False,
             is_verified=True,
@@ -399,25 +561,23 @@ async def oauth_callback(
         await session.flush()
 
         # Assign default roles
-        if provider.default_role_ids:
+        if default_role_ids:
             rbac_dao = RbacDAO(session)
-            role_ids = [uuid.UUID(rid) for rid in provider.default_role_ids if rid]
+            role_ids = [uuid.UUID(rid) for rid in default_role_ids if rid]
             if role_ids:
                 await rbac_dao.set_user_roles(user.id, role_ids)
                 await session.flush()
 
     # Upsert OAuth account record
-    from sqlalchemy.dialects.postgresql import insert as pg_insert  # noqa: PLC0415
-
     await session.execute(
         pg_insert(OAuthAccount)
         .values(
             id=uuid.uuid4(),
             user_id=user.id,
-            oauth_name=provider.name,
+            oauth_name=provider_name,
             access_token=access_token,
-            expires_at=token.get("expires_at"),
-            refresh_token=token.get("refresh_token"),
+            expires_at=expires_at,
+            refresh_token=refresh_token,
             account_id=str(account_id),
             account_email=account_email,
         )
@@ -425,8 +585,8 @@ async def oauth_callback(
             index_elements=[OAuthAccount.id],
             set_={
                 "access_token": access_token,
-                "expires_at": token.get("expires_at"),
-                "refresh_token": token.get("refresh_token"),
+                "expires_at": expires_at,
+                "refresh_token": refresh_token,
                 "account_email": account_email,
             },
         ),

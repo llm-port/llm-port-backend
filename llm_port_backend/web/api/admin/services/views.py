@@ -104,6 +104,23 @@ _MODULE_DEFS: list[dict[str, Any]] = [
             "llm-port-mailer",
         ],
     },
+    {
+        "name": "auth",
+        "display_name": "External Auth",
+        "description": (
+            "Enterprise SSO module providing OIDC and OAuth2 external "
+            "authentication provider management."
+        ),
+        "settings_flag": "auth_enabled",
+        "health_url_fn": lambda: f"{settings.auth_service_url.rstrip('/')}/api/providers/health",
+        "compose_profile": "auth",
+        "compose_services": [
+            "llm-port-auth",
+        ],
+        "container_names": [
+            "llm-port-auth",
+        ],
+    },
 ]
 
 # Fast lookup by module name.
