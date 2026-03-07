@@ -31,6 +31,8 @@
     "rag_explorer": "Explorer",
     "rag_publishes": "Publishes",
     "rag_search": "Search",
+    "rag_documents": "Documents",
+    "rag_collections": "Collections",
     "logs": "Logs",
     "settings": "Settings",
     "pii_group": "Privacy (PII)",
@@ -44,7 +46,8 @@
     "auth_providers": "Auth Providers",
     "pinned": "Pinned",
     "reset_nav_order": "Reset navigation order",
-    "security_map": "Data Residency"
+    "security_map": "Data Residency",
+    "scheduler": "Scheduler"
   },
   "auth": {
     "logout": "Logout",
@@ -521,7 +524,16 @@
     "image_pull_starting": "Starting download…",
     "image_pull_layers": "layers",
     "image_pull_success": "Image pulled successfully.",
-    "image_pull_failed": "Failed to pull image: {{error}}"
+    "image_pull_failed": "Failed to pull image: {{error}}",
+    "engine_configuration": "Engine Configuration"
+  },
+  "vllm": {
+    "recipe": "Recipe",
+    "recipe_custom": "Custom",
+    "search_args": "Search parameters...",
+    "args_modified": "{{count}} arg(s) modified",
+    "reset_all": "Reset all to defaults",
+    "suggested": "suggested"
   },
   "llm_runtime_detail": {
     "failed_load": "Failed to load runtime.",
@@ -590,7 +602,9 @@
     "overlap": "Overlap",
     "by_headings": "Split by headings",
     "last_updated": "Last updated",
-    "not_configured": "Runtime config is not configured yet."
+    "not_configured": "Runtime config is not configured yet.",
+    "lite_settings_hint": "RAG Lite settings are managed on the Settings page under the RAG category.",
+    "file_store": "File Store"
   },
   "rag_collectors": {
     "title": "RAG Collectors",
@@ -650,6 +664,31 @@
     "search": "Search",
     "results": "Results ({{count}})",
     "debug_payload": "Debug Payload"
+  },
+  "rag_lite": {
+    "documents_title": "RAG Documents",
+    "documents_description": "Upload and manage documents for RAG Lite vector search.",
+    "upload": "Upload",
+    "upload_file": "Upload File",
+    "filename": "Filename",
+    "status": "Status",
+    "chunks": "Chunks",
+    "size": "Size",
+    "uploaded": "Uploaded",
+    "no_documents": "No documents yet. Upload a file to get started.",
+    "failed_load": "Failed to load documents.",
+    "failed_upload": "Failed to upload file.",
+    "failed_delete": "Failed to delete document.",
+    "confirm_delete": "Delete this document?",
+    "collections_title": "RAG Collections",
+    "collections_description": "Organise documents into collections for scoped search.",
+    "collection_name": "Collection Name",
+    "collection_description": "Description (optional)",
+    "no_collections": "No collections yet.",
+    "failed_load_collections": "Failed to load collections.",
+    "failed_create_collection": "Failed to create collection.",
+    "failed_delete_collection": "Failed to delete collection.",
+    "confirm_delete_collection": "Delete this collection and unlink its documents?"
   },
   "agents_api_docs": {
     "title": "Endpoint",
@@ -917,5 +956,25 @@
     "copy_token": "Copy to clipboard",
     "copied": "Copied!",
     "token_warning": "Store this token securely. It will not be shown again after you leave this page."
+  },
+  "scheduler": {
+    "title": "Scheduler",
+    "empty": "No background jobs.",
+    "failed_load": "Failed to load jobs.",
+    "cancel_failed": "Cancel failed.",
+    "retry_failed": "Retry failed.",
+    "progress": "Progress",
+    "started": "Started",
+    "retry": "Retry",
+    "queued": "Queued",
+    "running": "Running",
+    "success": "Success",
+    "failed": "Failed",
+    "canceled": "Canceled",
+    "search_placeholder": "Search jobs...",
+    "job_name": "Job",
+    "type": "Type",
+    "type_model_download": "Model Download",
+    "type_rag_ingest": "RAG Ingest"
   }
 }

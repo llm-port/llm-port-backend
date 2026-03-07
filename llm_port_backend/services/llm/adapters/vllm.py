@@ -129,7 +129,12 @@ class VLLMAdapter(ProviderAdapter):
         )
 
         # ── Model argument — pass the HF repo ID directly ────────────
+        # We explicitly set ENTRYPOINT to ["vllm", "serve"] so the
+        # container command is deterministic regardless of image version
+        # (older images used CMD ["serve"], newer ones bake "serve" into
+        # ENTRYPOINT).  CMD then carries only the flags.
         model_name = model.hf_repo_id or str(model.id)
+        entrypoint = ["vllm", "serve"]
         cmd = ["--model", model_name]
 
         # Generic config → vLLM flags
@@ -172,7 +177,35 @@ class VLLMAdapter(ProviderAdapter):
         if enforce_eager:
             cmd += ["--enforce-eager", "--disable-frontend-multiprocessing"]
 
-        # Provider overlay → extra args
+        # ── Structured engine args from provider_config ─────────────
+        # The frontend wizard sends a dict of {flag: value} pairs under
+        # provider_config.engine_args.  These are CLI flags without the
+        # leading --.  We skip any flag already set by the legacy
+        # generic_config handling above to avoid argparse duplication.
+        #
+        # Flags removed in newer vLLM versions — skip them for the
+        # latest image to avoid "unrecognized arguments" crashes.
+        # The legacy image (v0.6.6) still supports them.
+        is_legacy_image = image == _VLLM_LEGACY_IMAGE
+        _LEGACY_ONLY_FLAGS = {"task"}  # --task removed after v0.7.x
+
+        engine_args: dict[str, Any] = pc.get("engine_args", {})
+        if engine_args:
+            existing = {c.lstrip("-") for c in cmd if c.startswith("--")}
+            for flag, value in engine_args.items():
+                if not isinstance(flag, str) or not flag.replace("-", "").isalnum():
+                    continue  # skip invalid flag names
+                if flag in existing:
+                    continue  # already set by generic_config
+                if flag in _LEGACY_ONLY_FLAGS and not is_legacy_image:
+                    continue  # flag removed in latest vLLM
+                if isinstance(value, bool):
+                    if value:
+                        cmd.append(f"--{flag}")
+                else:
+                    cmd += [f"--{flag}", str(value)]
+
+        # Provider overlay → extra args (raw passthrough)
         if extra_args := pc.get("extra_args"):
             cmd += extra_args
 
@@ -196,13 +229,28 @@ class VLLMAdapter(ProviderAdapter):
         gpu_devices = gc.get("gpu_devices", "all")
 
         # ── Environment ───────────────────────────────────────────────
+        # Check if trust-remote-code is enabled — models with custom code
+        # (e.g. Jina, Qwen) may need to fetch tokenizer/processor files
+        # at startup even when the weights are cached locally.
+        trust_remote = bool(engine_args.get("trust-remote-code", False))
+
         env: list[str] = [
-            # Prevent vLLM from attempting downloads inside the container
-            "HF_HUB_OFFLINE=1",
-            "TRANSFORMERS_OFFLINE=1",
             # Point HuggingFace at our mounted cache directory
             f"HF_HUB_CACHE={hf_cache_mount}",
         ]
+        if trust_remote:
+            # Allow network access for custom-code models so transformers
+            # can fetch tokenizer/processor scripts not in the cache.
+            env += ["HF_HUB_OFFLINE=0", "TRANSFORMERS_OFFLINE=0"]
+            if not settings.hf_token:
+                log.warning(
+                    "Runtime %r uses --trust-remote-code but no HF_TOKEN is "
+                    "configured. Download of custom model code may fail.",
+                    runtime.name,
+                )
+        else:
+            # Prevent vLLM from attempting downloads inside the container
+            env += ["HF_HUB_OFFLINE=1", "TRANSFORMERS_OFFLINE=1"]
         if settings.hf_token:
             env.append(f"HF_TOKEN={settings.hf_token}")
         if gc.get("log_level"):
@@ -240,6 +288,7 @@ class VLLMAdapter(ProviderAdapter):
             image=image,
             name=f"llm-port-vllm-{runtime.name}",
             cmd=cmd,
+            entrypoint=entrypoint,
             env=env or None,
             ports=ports,
             volumes=volumes,
@@ -276,6 +325,7 @@ class VLLMAdapter(ProviderAdapter):
         return {
             "supports_gpu": True,
             "supports_openai_compat": True,
+            "supports_embeddings": True,
             "supports_quant": True,
             "artifact_formats": ["safetensors"],
             "gpu_vendor": inventory.primary_vendor.value,

@@ -459,6 +459,113 @@ SETTINGS_REGISTRY: tuple[SettingDefinition, ...] = (
         apply_scope=SystemApplyScope.LIVE_RELOAD,
         service_targets=(),
     ),
+    # ── RAG Lite ─────────────────────────────────────────────
+    SettingDefinition(
+        key="rag_lite.enabled",
+        type="bool",
+        category="modules",
+        group="rag_lite",
+        label="RAG Lite Enabled",
+        description=(
+            "Enable the embedded RAG Lite module (pgvector-only, no external "
+            "RAG service). Ignored when the full RAG module is enabled."
+        ),
+        is_secret=False,
+        default=False,
+        apply_scope=SystemApplyScope.LIVE_RELOAD,
+        service_targets=(),
+    ),
+    SettingDefinition(
+        key="rag_lite.embedding_provider_id",
+        type="string",
+        category="modules",
+        group="rag_lite",
+        label="Embedding Provider",
+        description=(
+            "UUID of the LLM provider to use for embeddings. "
+            "Leave empty to auto-detect (first provider with "
+            "supports_embeddings=true)."
+        ),
+        is_secret=False,
+        default="",
+        apply_scope=SystemApplyScope.LIVE_RELOAD,
+        service_targets=(),
+    ),
+    SettingDefinition(
+        key="rag_lite.embedding_model",
+        type="string",
+        category="modules",
+        group="rag_lite",
+        label="Embedding Model Name",
+        description=(
+            "Model name for the /v1/embeddings endpoint. "
+            "Leave empty to use the provider's configured model."
+        ),
+        is_secret=False,
+        default="",
+        apply_scope=SystemApplyScope.LIVE_RELOAD,
+        service_targets=(),
+    ),
+    SettingDefinition(
+        key="rag_lite.embedding_dim",
+        type="int",
+        category="modules",
+        group="rag_lite",
+        label="Embedding Dimension",
+        description="Actual embedding dimension returned by the model (e.g. 768, 1536).",
+        is_secret=False,
+        default=768,
+        apply_scope=SystemApplyScope.LIVE_RELOAD,
+        service_targets=(),
+    ),
+    SettingDefinition(
+        key="rag_lite.chunk_max_tokens",
+        type="int",
+        category="modules",
+        group="rag_lite",
+        label="Chunk Max Tokens",
+        description="Maximum tokens per text chunk (approx. 4 chars/token).",
+        is_secret=False,
+        default=512,
+        apply_scope=SystemApplyScope.LIVE_RELOAD,
+        service_targets=(),
+    ),
+    SettingDefinition(
+        key="rag_lite.chunk_overlap_tokens",
+        type="int",
+        category="modules",
+        group="rag_lite",
+        label="Chunk Overlap Tokens",
+        description="Overlap tokens between consecutive chunks.",
+        is_secret=False,
+        default=64,
+        apply_scope=SystemApplyScope.LIVE_RELOAD,
+        service_targets=(),
+    ),
+    SettingDefinition(
+        key="rag_lite.file_store_root",
+        type="string",
+        category="modules",
+        group="rag_lite",
+        label="File Store Root Path",
+        description="Local filesystem path for storing uploaded RAG Lite documents.",
+        is_secret=False,
+        default="/data/llm-port/rag-lite",
+        apply_scope=SystemApplyScope.LIVE_RELOAD,
+        service_targets=(),
+    ),
+    SettingDefinition(
+        key="rag_lite.upload_max_file_mb",
+        type="int",
+        category="modules",
+        group="rag_lite",
+        label="Max Upload File Size (MB)",
+        description="Maximum file upload size in megabytes for RAG Lite.",
+        is_secret=False,
+        default=20,
+        apply_scope=SystemApplyScope.LIVE_RELOAD,
+        service_targets=(),
+    ),
 )
 
 

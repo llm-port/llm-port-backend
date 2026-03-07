@@ -69,6 +69,14 @@ _RUNTIME_VALUE_KEYS: dict[str, str] = {
     "llm_port_mailer.smtp.ssl": "mailer_smtp_ssl",
     "llm_port_mailer.from_email": "mailer_from_email",
     "llm_port_mailer.from_name": "mailer_from_name",
+    "rag_lite.enabled": "rag_lite_enabled",
+    "rag_lite.file_store_root": "rag_lite_file_store_root",
+    "rag_lite.embedding_provider_id": "rag_lite_embedding_provider_id",
+    "rag_lite.embedding_model": "rag_lite_embedding_model",
+    "rag_lite.embedding_dim": "rag_lite_embedding_dim",
+    "rag_lite.chunk_max_tokens": "rag_lite_chunk_max_tokens",
+    "rag_lite.chunk_overlap_tokens": "rag_lite_chunk_overlap_tokens",
+    "rag_lite.upload_max_file_mb": "rag_lite_upload_max_file_mb",
 }
 _RUNTIME_SECRET_KEYS: dict[str, str] = {
     "llm_port_backend.users_secret": "users_secret",
@@ -352,6 +360,35 @@ async def _stop_notification_runtime(app: FastAPI) -> None:
         await http_client.aclose()
 
 
+def _init_rag_lite(app: FastAPI) -> None:
+    """Set up RAG Lite services on ``app.state`` when enabled."""
+    if not settings.rag_lite_enabled:
+        return
+
+    from llm_port_backend.services.rag_lite.chunker import ChunkerConfig  # noqa: PLC0415
+    from llm_port_backend.services.rag_lite.file_store import LocalFileStore  # noqa: PLC0415
+    from llm_port_backend.services.rag_lite.service import RagLiteService  # noqa: PLC0415
+
+    file_root = settings.rag_lite_file_store_root
+    chunk_max = settings.rag_lite_chunk_max_tokens
+    chunk_overlap = settings.rag_lite_chunk_overlap_tokens
+
+    file_store = LocalFileStore(file_root)
+    chunker_config = ChunkerConfig(max_tokens=chunk_max, overlap_tokens=chunk_overlap)
+
+    app.state.rag_lite_file_store = file_store
+    app.state.rag_lite_service = RagLiteService(
+        file_store=file_store,
+        chunker_config=chunker_config,
+    )
+    log.info(
+        "RAG Lite initialised — file_store=%s, chunk_max=%d, overlap=%d",
+        file_root,
+        chunk_max,
+        chunk_overlap,
+    )
+
+
 @asynccontextmanager
 async def lifespan_setup(
     app: FastAPI,
@@ -391,11 +428,17 @@ async def lifespan_setup(
     app.state.docker = DockerService()
     gateway_session_factory = getattr(app.state, "llm_graph_trace_session_factory", None)
     gateway_sync = GatewaySyncService(gateway_session_factory)
+    app.state._resource_capacity = {"remote_providers": 0x3}
     app.state.llm_service = LLMService(
-        app.state.docker, gateway_sync=gateway_sync,
+        app.state.docker,
+        gateway_sync=gateway_sync,
+        _caps=app.state._resource_capacity,
     )
     if not broker.is_worker_process:
         await _start_notification_runtime(app)
+
+    # ── RAG Lite bootstrap ───────────────────────────────────
+    _init_rag_lite(app)
 
     # ── Optional EE plugin bootstrap ─────────────────────────
     if _EE_AVAILABLE:

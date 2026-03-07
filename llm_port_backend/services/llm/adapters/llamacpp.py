@@ -47,6 +47,7 @@ class LlamaCppAdapter(ProviderAdapter):
         return {
             "supports_gpu": True,
             "supports_openai_compat": True,
+            "supports_embeddings": True,
             "supports_quant": True,
             "artifact_formats": ["gguf"],
         }

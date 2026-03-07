@@ -18,6 +18,7 @@ from llm_port_backend.web.api.llm.schema import (
     ArtifactDTO,
     DownloadJobDTO,
     DownloadResponseDTO,
+    HFCacheScanResultDTO,
     ModelDownloadRequest,
     ModelDTO,
     ModelRegisterRequest,
@@ -113,6 +114,21 @@ async def register_model(
         audit_dao=audit_dao,
     )
     return ModelDTO.model_validate(model)
+
+
+@router.post("/scan-local", response_model=HFCacheScanResultDTO)
+async def scan_local_models(
+    user: User = Depends(require_permission("llm.models", "create")),
+    llm_service: LLMService = Depends(get_llm_service),
+    model_dao: ModelDAO = Depends(),
+    artifact_dao: ArtifactDAO = Depends(),
+) -> HFCacheScanResultDTO:
+    """Scan HF cache directories and auto-import any new models."""
+    imported = await llm_service.auto_import_hf_cache(model_dao, artifact_dao)
+    return HFCacheScanResultDTO(
+        imported_count=len(imported),
+        imported=[ModelDTO.model_validate(m) for m in imported],
+    )
 
 
 @router.delete("/{model_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -49,6 +49,8 @@ dependencies = [
   "python-docx >=1.1.0,<2",
   "python-pptx >=1.0.0,<2",
   "openpyxl >=3.1.0,<4",
+  "pgvector >=0.3.6,<1",
+  "aiofiles >=24.1.0,<25",
 ]
 
 [dependency-groups]

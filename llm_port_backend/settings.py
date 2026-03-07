@@ -109,7 +109,7 @@ class Settings(BaseSettings):
     rag_timeout_sec: float = 30.0
     rag_upload_max_file_mb: int = 50
     rag_upload_allowed_extensions: str = ".pdf,.docx,.txt,.md,.html,.csv,.json"
-    rag_enabled: bool = True
+    rag_enabled: bool = False
 
     # PII module settings
     pii_enabled: bool = True
@@ -141,6 +141,16 @@ class Settings(BaseSettings):
     # Document Processor module settings (Docling)
     docling_enabled: bool = False
     docling_service_url: str = "http://127.0.0.1:8006"
+
+    # RAG Lite module settings (embedded pgvector-based RAG)
+    rag_lite_enabled: bool = False
+    rag_lite_file_store_root: str = "/data/llm-port/rag-lite"
+    rag_lite_embedding_provider_id: str = ""
+    rag_lite_embedding_model: str = ""
+    rag_lite_embedding_dim: int = 768
+    rag_lite_chunk_max_tokens: int = 512
+    rag_lite_chunk_overlap_tokens: int = 64
+    rag_lite_upload_max_file_mb: int = 20
 
     # Admin dashboard / Grafana embedding settings
     grafana_url: str | None = Field(

@@ -3,7 +3,7 @@
 import uuid
 
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from llm_port_backend.db.dependencies import get_db_session
@@ -101,12 +101,38 @@ class ProviderDAO:
         await self.session.delete(provider)
         return True
 
+    async def count_by_target(self, target: ProviderTarget) -> int:
+        """Return the number of providers matching *target*."""
+        result = await self.session.execute(
+            select(func.count()).select_from(LLMProvider).where(
+                LLMProvider.target == target,
+            ),
+        )
+        return result.scalar_one()
+
     async def has_runtimes(self, provider_id: uuid.UUID) -> bool:
         """Check if any runtimes reference this provider."""
         result = await self.session.execute(
             select(LLMRuntime.id).where(LLMRuntime.provider_id == provider_id).limit(1),
         )
         return result.scalar_one_or_none() is not None
+
+    async def list_embedding_capable(self) -> list[LLMProvider]:
+        """Return providers whose capabilities include supports_embeddings=true."""
+        from sqlalchemy import cast, String  # noqa: PLC0415
+
+        result = await self.session.execute(
+            select(LLMProvider)
+            .where(
+                cast(
+                    LLMProvider.capabilities["supports_embeddings"].as_string(),
+                    String,
+                )
+                == "true",
+            )
+            .order_by(LLMProvider.created_at.desc()),
+        )
+        return list(result.scalars().all())
 
 
 # -----------------------------------------------------------------------
@@ -428,6 +454,9 @@ class DownloadJobDAO:
         job.progress = progress
         if status is not None:
             job.status = status
+            # Clear stale error when job moves to a non-failure state
+            if status != DownloadJobStatus.FAILED:
+                job.error_message = None
         return job
 
     async def set_failed(

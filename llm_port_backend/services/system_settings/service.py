@@ -43,6 +43,14 @@ _RUNTIME_VALUE_KEY_MAP: dict[str, str] = {
     "llm_port_mailer.smtp.ssl": "mailer_smtp_ssl",
     "llm_port_mailer.from_email": "mailer_from_email",
     "llm_port_mailer.from_name": "mailer_from_name",
+    "rag_lite.enabled": "rag_lite_enabled",
+    "rag_lite.embedding_provider_id": "rag_lite_embedding_provider_id",
+    "rag_lite.embedding_model": "rag_lite_embedding_model",
+    "rag_lite.embedding_dim": "rag_lite_embedding_dim",
+    "rag_lite.chunk_max_tokens": "rag_lite_chunk_max_tokens",
+    "rag_lite.chunk_overlap_tokens": "rag_lite_chunk_overlap_tokens",
+    "rag_lite.file_store_root": "rag_lite_file_store_root",
+    "rag_lite.upload_max_file_mb": "rag_lite_upload_max_file_mb",
 }
 _RUNTIME_SECRET_KEY_MAP: dict[str, str] = {
     "llm_port_backend.users_secret": "users_secret",

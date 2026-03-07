@@ -47,6 +47,7 @@ class TGIAdapter(ProviderAdapter):
         return {
             "supports_gpu": True,
             "supports_openai_compat": True,
+            "supports_embeddings": False,
             "supports_quant": True,
             "artifact_formats": ["safetensors"],
         }

@@ -72,6 +72,30 @@ async def _sync_mailer_enabled(
     return []
 
 
+async def _sync_rag_lite_enabled(
+    service: SystemSettingsService,
+    enabled: bool,
+    actor_id: Any,
+) -> list[str]:
+    """Sync ``rag_lite.enabled`` as module lifecycle flag."""
+    try:
+        result = await service.update_value(
+            key="rag_lite.enabled",
+            value=enabled,
+            actor_id=actor_id,
+            root_mode_active=False,
+            target_host="local",
+        )
+    except Exception as exc:
+        logger.exception("Failed to sync rag_lite.enabled")
+        return [f"Failed to sync rag_lite.enabled: {exc}"]
+
+    if result.apply_status != "success":
+        details = "; ".join(result.messages) if result.messages else "unknown apply failure"
+        return [f"Failed to apply rag_lite.enabled={enabled}: {details}"]
+    return []
+
+
 async def _sync_docling_enabled(
     service: SystemSettingsService,
     enabled: bool,
@@ -106,6 +130,20 @@ def register_core_modules() -> None:
     modules that are already registered.
     """
     _defs: list[ModuleDef] = [
+        ModuleDef(
+            name="rag_lite",
+            display_name="RAG Lite",
+            description=(
+                "Embedded Retrieval-Augmented Generation with pgvector. "
+                "Upload documents, chunk, embed, and search — no external "
+                "RAG service required."
+            ),
+            module_type="plugin",
+            settings_flag="rag_lite_enabled",
+            is_available_fn=lambda: settings.rag_lite_enabled,
+            on_enable=_sync_rag_lite_enabled,
+            on_disable=_sync_rag_lite_enabled,
+        ),
         ModuleDef(
             name="rag",
             display_name="RAG Engine",

@@ -31,6 +31,8 @@
     "rag_explorer": "Explorer",
     "rag_publishes": "Veröffentlichungen",
     "rag_search": "Suche",
+    "rag_documents": "Dokumente",
+    "rag_collections": "Sammlungen",
     "logs": "Logs",
     "settings": "Einstellungen",
     "pii_group": "Datenschutz (PII)",
@@ -44,7 +46,8 @@
     "auth_providers": "Auth-Anbieter",
     "pinned": "Fixiert",
     "reset_nav_order": "Navigationsreihenfolge zurücksetzen",
-    "security_map": "Datenresidenz"
+    "security_map": "Datenresidenz",
+    "scheduler": "Scheduler"
   },
   "auth": {
     "logout": "Abmelden",
@@ -839,5 +842,25 @@
     "copy_token": "In Zwischenablage kopieren",
     "copied": "Kopiert!",
     "token_warning": "Bewahren Sie dieses Token sicher auf. Es wird nicht erneut angezeigt, nachdem Sie diese Seite verlassen."
+  },
+  "scheduler": {
+    "title": "Scheduler",
+    "empty": "Keine Hintergrund-Jobs.",
+    "failed_load": "Jobs konnten nicht geladen werden.",
+    "cancel_failed": "Abbrechen fehlgeschlagen.",
+    "retry_failed": "Wiederholung fehlgeschlagen.",
+    "progress": "Fortschritt",
+    "started": "Gestartet",
+    "retry": "Wiederholen",
+    "queued": "Warteschlange",
+    "running": "Läuft",
+    "success": "Erfolgreich",
+    "failed": "Fehlgeschlagen",
+    "canceled": "Abgebrochen",
+    "search_placeholder": "Jobs suchen...",
+    "job_name": "Job",
+    "type": "Typ",
+    "type_model_download": "Modell-Download",
+    "type_rag_ingest": "RAG-Aufnahme"
   }
 }

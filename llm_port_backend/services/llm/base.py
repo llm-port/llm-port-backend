@@ -37,6 +37,7 @@ class ContainerSpec:
     image: str
     name: str | None = None
     cmd: list[str] | None = None
+    entrypoint: list[str] | None = None
     env: list[str] | None = None
     ports: dict[str, list[dict[str, str]]] | None = None
     volumes: list[str] | None = None

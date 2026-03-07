@@ -47,6 +47,7 @@ class OllamaAdapter(ProviderAdapter):
         return {
             "supports_gpu": True,
             "supports_openai_compat": True,
+            "supports_embeddings": True,
             "supports_quant": False,
             "artifact_formats": ["gguf", "safetensors"],
         }

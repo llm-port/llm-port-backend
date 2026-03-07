@@ -32,6 +32,11 @@ admin_router.include_router(users_router, prefix="/users", tags=["admin-users"])
 admin_router.include_router(system_router, prefix="/system", tags=["admin-system"])
 admin_router.include_router(services_router, tags=["admin-services"])
 
+# --- Scheduler (unified background jobs) ---
+from llm_port_backend.web.api.admin.scheduler.views import router as scheduler_router  # noqa: E402
+
+admin_router.include_router(scheduler_router, prefix="/scheduler", tags=["admin-scheduler"])
+
 # --- Groups management ---
 from llm_port_backend.web.api.admin.groups.views import router as groups_router  # noqa: E402
 
@@ -55,10 +60,16 @@ from llm_port_backend.web.api.admin.pii.views import router as pii_router  # noq
 admin_router.include_router(pii_router, prefix="/pii", tags=["admin-pii"])
 
 # --- Optional module: RAG ------------------------------------------------
+# RAG Lite routes are always mounted (like PII) so settings toggled at
+# runtime take effect without restart.  The full RAG Engine takes
+# precedence when explicitly enabled via env-var.
 if settings.rag_enabled:
     from llm_port_backend.web.api.admin.rag.views import router as rag_router
 
     admin_router.include_router(rag_router, prefix="/rag", tags=["admin-rag"])
     logger.info("RAG module enabled — /admin/rag routes registered")
 else:
-    logger.info("RAG module disabled — /admin/rag routes skipped")
+    from llm_port_backend.web.api.admin.rag_lite.views import router as rag_lite_router
+
+    admin_router.include_router(rag_lite_router, prefix="/rag", tags=["admin-rag"])
+    logger.info("RAG Lite routes registered — activate via Settings > Modules")

@@ -31,6 +31,8 @@
     "rag_explorer": "Explorador",
     "rag_publishes": "Publicaciones",
     "rag_search": "Búsqueda",
+    "rag_documents": "Documentos",
+    "rag_collections": "Colecciones",
     "logs": "Logs",
     "settings": "Configuracion",
     "pii_group": "Privacidad (PII)",
@@ -44,7 +46,8 @@
     "auth_providers": "Proveedores de autenticación",
     "pinned": "Fijado",
     "reset_nav_order": "Restablecer orden de navegación",
-    "security_map": "Residencia de Datos"
+    "security_map": "Residencia de datos",
+    "scheduler": "Planificador"
   },
   "auth": {
     "logout": "Cerrar sesion",
@@ -839,5 +842,25 @@
     "copy_token": "Copiar al portapapeles",
     "copied": "¡Copiado!",
     "token_warning": "Guarde este token de forma segura. No se mostrará de nuevo después de salir de esta página."
+  },
+  "scheduler": {
+    "title": "Planificador",
+    "empty": "No hay trabajos en segundo plano.",
+    "failed_load": "Error al cargar trabajos.",
+    "cancel_failed": "Error al cancelar.",
+    "retry_failed": "Error al reintentar.",
+    "progress": "Progreso",
+    "started": "Iniciado",
+    "retry": "Reintentar",
+    "queued": "En cola",
+    "running": "Ejecutando",
+    "success": "Éxito",
+    "failed": "Fallido",
+    "canceled": "Cancelado",
+    "search_placeholder": "Buscar trabajos...",
+    "job_name": "Trabajo",
+    "type": "Tipo",
+    "type_model_download": "Descarga de modelo",
+    "type_rag_ingest": "Ingesta RAG"
   }
 }

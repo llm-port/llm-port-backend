@@ -11,6 +11,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from huggingface_hub import scan_cache_dir
+
 from llm_port_backend.db.dao.llm_dao import (
     ArtifactDAO,
     DownloadJobDAO,
@@ -47,9 +49,11 @@ class LLMService:
         docker: DockerService,
         *,
         gateway_sync: GatewaySyncService | None = None,
+        _caps: dict[str, int | None] | None = None,
     ) -> None:
         self.docker = docker
         self.gateway_sync = gateway_sync or GatewaySyncService(None)
+        self._caps: dict[str, int | None] = _caps if _caps is not None else {}
 
     # ------------------------------------------------------------------
     # Providers
@@ -75,6 +79,20 @@ class LLMService:
         """
         if target == ProviderTarget.REMOTE_ENDPOINT and not endpoint_url:
             raise ValueError("endpoint_url is required for remote providers")
+
+        # ── capacity enforcement ─────────────────────────────
+        _lim = self._caps.get("remote_providers")
+        if _lim is not None and target == ProviderTarget.REMOTE_ENDPOINT:
+            if await provider_dao.count_by_target(ProviderTarget.REMOTE_ENDPOINT) >= _lim:
+                from fastapi import HTTPException  # noqa: PLC0415
+
+                raise HTTPException(
+                    status_code=402,
+                    detail=(
+                        "Resource capacity reached for this deployment. "
+                        "Please upgrade your plan to add more providers."
+                    ),
+                )
 
         # Normalise the URL so the gateway proxy does not duplicate /v1.
         if endpoint_url:
@@ -190,6 +208,88 @@ class LLMService:
         return model
 
     # ------------------------------------------------------------------
+    # HF cache auto-discovery
+    # ------------------------------------------------------------------
+
+    async def auto_import_hf_cache(
+        self,
+        model_dao: ModelDAO,
+        artifact_dao: ArtifactDAO,
+    ) -> list[LLMModel]:
+        """Scan HF cache directories and auto-import any new models.
+
+        Scans both the app-managed cache (``model_store_root/hf``) and the
+        default HuggingFace cache (``~/.cache/huggingface/hub``).  Models
+        whose ``hf_repo_id`` is already registered are skipped.  Newly
+        imported models are tagged ``["local"]`` and set to AVAILABLE.
+
+        Returns the list of newly created model records.
+        """
+        existing_models = await model_dao.list_all()
+        registered_repos: set[str] = {
+            m.hf_repo_id for m in existing_models if m.hf_repo_id
+        }
+
+        # Directories to scan -- deduplicated by resolved path
+        cache_dirs: list[Path] = []
+        seen_resolved: set[Path] = set()
+        app_cache = Path(settings.model_store_root, "hf")
+        default_cache = Path.home() / ".cache" / "huggingface" / "hub"
+
+        for d in (app_cache, default_cache):
+            resolved = d.resolve()
+            if resolved.is_dir() and resolved not in seen_resolved:
+                cache_dirs.append(d)
+                seen_resolved.add(resolved)
+
+        if not cache_dirs:
+            return []
+
+        imported: list[LLMModel] = []
+
+        for cache_dir in cache_dirs:
+            try:
+                cache_info = scan_cache_dir(cache_dir)
+            except Exception:
+                log.debug("Could not scan HF cache at %s", cache_dir, exc_info=True)
+                continue
+
+            for repo in cache_info.repos:
+                if repo.repo_type != "model":
+                    continue
+                if repo.repo_id in registered_repos:
+                    continue
+
+                # Pick the latest revision snapshot
+                revisions = sorted(
+                    repo.revisions,
+                    key=lambda r: r.last_modified,
+                    reverse=True,
+                )
+                if not revisions:
+                    continue
+                snapshot_path = revisions[0].snapshot_path
+                if not snapshot_path.is_dir():
+                    continue
+
+                model = await model_dao.create(
+                    display_name=repo.repo_id,
+                    source=ModelSource.HUGGINGFACE,
+                    hf_repo_id=repo.repo_id,
+                    tags=["local"],
+                    status=ModelStatus.AVAILABLE,
+                )
+                artifacts = scan_model_directory(str(snapshot_path))
+                if artifacts:
+                    await artifact_dao.create_batch(model.id, artifacts)
+
+                imported.append(model)
+                registered_repos.add(repo.repo_id)
+                log.info("Auto-imported HF cache model: %s", repo.repo_id)
+
+        return imported
+
+    # ------------------------------------------------------------------
     # Runtimes
     # ------------------------------------------------------------------
 
@@ -282,6 +382,7 @@ class LLMService:
                 image=spec.image,
                 name=spec.name,
                 cmd=spec.cmd,
+                entrypoint=spec.entrypoint,
                 env=spec.env,
                 ports=spec.ports,
                 volumes=spec.volumes,
@@ -450,6 +551,7 @@ class LLMService:
             image=spec.image,
             name=spec.name,
             cmd=spec.cmd,
+            entrypoint=spec.entrypoint,
             env=spec.env,
             ports=spec.ports,
             volumes=spec.volumes,

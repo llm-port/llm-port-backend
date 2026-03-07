@@ -247,6 +247,18 @@ class HFTokenSetRequest(BaseModel):
 
 
 # -----------------------------------------------------------------------
+# HF Cache Scan
+# -----------------------------------------------------------------------
+
+
+class HFCacheScanResultDTO(BaseModel):
+    """Result of auto-importing models from the local HF cache."""
+
+    imported_count: int
+    imported: list[ModelDTO]
+
+
+# -----------------------------------------------------------------------
 # Graph
 # -----------------------------------------------------------------------
 
