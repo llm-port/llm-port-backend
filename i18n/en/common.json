@@ -1030,5 +1030,25 @@
     "stat_sessions": "Sessions",
     "stat_attachments": "Attachments",
     "stat_storage": "Total Storage"
+  },
+  "chat": {
+    "title": "Chat",
+    "model": "Model",
+    "send": "Send",
+    "stop": "Stop",
+    "attach_file": "Attach file",
+    "input_placeholder": "Type a message…",
+    "new_chat": "New chat",
+    "new_project": "New project",
+    "project_name": "Project name",
+    "no_project": "No project",
+    "untitled": "Untitled chat",
+    "move_to_project": "Move to project",
+    "conversation": "Conversation",
+    "welcome_title": "How can I help you?",
+    "welcome_subtitle": "Start a conversation, upload a file, or try one of these suggestions.",
+    "token_detail": "Prompt: {{prompt}} · Completion: {{completion}} · Total: {{total}}",
+    "no_models": "No models",
+    "no_models_hint": "No models are available. Configure a provider and model alias in the admin panel."
   }
 }

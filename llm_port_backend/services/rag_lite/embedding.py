@@ -30,12 +30,14 @@ class EmbeddingClient:
         api_key: str | None = None,
         dim: int = 768,
         timeout: float = 120.0,
+        http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
         self.dim = dim
         self.timeout = timeout
+        self._shared_client = http_client
 
     # ------------------------------------------------------------------
     # Public API
@@ -55,12 +57,19 @@ class EmbeddingClient:
     async def health_check(self) -> bool:
         """Quick probe to verify the embedding provider is reachable."""
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
+            if self._shared_client:
+                resp = await self._shared_client.get(
                     f"{self.base_url}/models",
                     headers=self._headers(),
+                    timeout=10.0,
                 )
-                return resp.status_code == 200  # noqa: PLR2004
+            else:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"{self.base_url}/models",
+                        headers=self._headers(),
+                    )
+            return resp.status_code == 200  # noqa: PLR2004
         except Exception:
             return False
 
@@ -202,14 +211,22 @@ class EmbeddingClient:
     async def _call_api(self, texts: list[str]) -> list[list[float]]:
         """Single batch call to the embeddings endpoint."""
         payload = {"model": self.model, "input": texts}
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(
+        if self._shared_client:
+            resp = await self._shared_client.post(
                 f"{self.base_url}/embeddings",
                 json=payload,
                 headers=self._headers(),
+                timeout=self.timeout,
             )
-            resp.raise_for_status()
-            data = resp.json()
+        else:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(
+                    f"{self.base_url}/embeddings",
+                    json=payload,
+                    headers=self._headers(),
+                )
+        resp.raise_for_status()
+        data = resp.json()
 
         # OpenAI-compatible response: { "data": [{"embedding": [...], "index": 0}, ...] }
         embeddings = sorted(data["data"], key=lambda x: x["index"])

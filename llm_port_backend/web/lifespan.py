@@ -101,6 +101,8 @@ def _setup_db(app: FastAPI) -> None:  # pragma: no cover
     engine = create_async_engine(
         str(settings.db_url),
         echo=settings.db_echo,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
         connect_args={"ssl": False},
     )
     session_factory = async_sessionmaker(
@@ -112,6 +114,8 @@ def _setup_db(app: FastAPI) -> None:  # pragma: no cover
     graph_engine = create_async_engine(
         str(settings.llm_graph_db_url),
         echo=False,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
         connect_args={"ssl": False},
     )
     app.state.llm_graph_trace_engine = graph_engine
@@ -427,6 +431,10 @@ async def lifespan_setup(
     init_rabbit(app)
     setup_prometheus(app)
     app.state.docker = DockerService()
+    app.state.http_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0),
+        limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+    )
     gateway_session_factory = getattr(app.state, "llm_graph_trace_session_factory", None)
     gateway_sync = GatewaySyncService(gateway_session_factory)
     app.state._resource_capacity = {"remote_providers": 0x3}
@@ -480,6 +488,10 @@ async def lifespan_setup(
     # ──────────────────────────────────────────────────────────
 
     await _stop_notification_runtime(app)
+
+    http_client: httpx.AsyncClient | None = getattr(app.state, "http_client", None)
+    if http_client is not None:
+        await http_client.aclose()
 
     if not broker.is_worker_process:
         await broker.shutdown()

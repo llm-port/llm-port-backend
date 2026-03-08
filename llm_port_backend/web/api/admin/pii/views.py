@@ -24,6 +24,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_pii_proxy_client: httpx.AsyncClient | None = None
+
+
+def _get_pii_client() -> httpx.AsyncClient:
+    global _pii_proxy_client
+    if _pii_proxy_client is None:
+        _pii_proxy_client = httpx.AsyncClient(timeout=15.0)
+    return _pii_proxy_client
+
 _PII_BASE: str = ""
 
 
@@ -93,13 +102,12 @@ async def get_pii_config_options(
     """Return normalized PII options for UI configuration forms."""
     fallback = _fallback_pii_options()
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{_pii_url()}/v1/pii/options",
-                timeout=8.0,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await _get_pii_client().get(
+            f"{_pii_url()}/v1/pii/options",
+            timeout=8.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
     except Exception:
         return fallback
 
@@ -298,14 +306,13 @@ async def get_pii_stats(
         params["until"] = until.isoformat()
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{_pii_url()}/v1/pii/stats",
-                params=params,
-                timeout=10.0,
-            )
-            resp.raise_for_status()
-            return resp.json()
+        resp = await _get_pii_client().get(
+            f"{_pii_url()}/v1/pii/stats",
+            params=params,
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
     except httpx.HTTPStatusError as exc:
         logger.warning("PII stats request failed: %s", exc)
         raise HTTPException(
@@ -345,14 +352,13 @@ async def list_pii_events(
         params["since"] = since.isoformat()
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(
-                f"{_pii_url()}/v1/pii/events",
-                params=params,
-                timeout=10.0,
-            )
-            resp.raise_for_status()
-            return resp.json()
+        resp = await _get_pii_client().get(
+            f"{_pii_url()}/v1/pii/events",
+            params=params,
+            timeout=10.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
     except httpx.HTTPStatusError as exc:
         logger.warning("PII events request failed: %s", exc)
         raise HTTPException(

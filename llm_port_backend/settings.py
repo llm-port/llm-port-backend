@@ -8,6 +8,8 @@ from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from yarl import URL
 
+_CPU_COUNT = os.cpu_count() or 1
+
 TEMP_DIR = Path(gettempdir())
 
 
@@ -33,7 +35,7 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
     # quantity of workers for uvicorn
-    workers_count: int = 1
+    workers_count: int = min(_CPU_COUNT, 4)
     # Enable uvicorn reloading
     reload: bool = False
 
@@ -58,6 +60,8 @@ class Settings(BaseSettings):
     db_pass: str = "llm_port_backend"  # noqa: S105
     db_base: str = "llm_port_backend"
     db_echo: bool = False
+    db_pool_size: int = max(5, _CPU_COUNT * 3)
+    db_max_overflow: int = max(10, _CPU_COUNT * 3)
 
     # Variables for RabbitMQ
     rabbit_host: str = "llm-port-backend-rmq"
@@ -154,6 +158,9 @@ class Settings(BaseSettings):
 
     # Chat & Sessions module settings (gateway feature, managed from backend)
     sessions_enabled: bool = True
+
+    # API Gateway URL (for proxying user-facing chat requests)
+    gateway_url: str = "http://127.0.0.1:9000"
 
     # Admin dashboard / Grafana embedding settings
     grafana_url: str | None = Field(

@@ -72,7 +72,7 @@ class GatewayAlertMonitor:
                 text(
                     "SELECT "
                     "  count(*) AS total, "
-                    "  count(*) FILTER (WHERE response_status >= 500) AS errors "
+                    "  count(*) FILTER (WHERE status_code >= 500) AS errors "
                     "FROM llm_gateway_request_log "
                     "WHERE created_at >= :cutoff"
                 ),

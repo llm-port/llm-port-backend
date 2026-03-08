@@ -222,7 +222,7 @@ async def _do_download(
     await _flush_progress(90)
 
     # Scan downloaded files in the snapshot directory
-    artifacts = scan_model_directory(snapshot_dir)
+    artifacts = await asyncio.to_thread(scan_model_directory, snapshot_dir)
     if artifacts:
         await artifact_dao.create_batch(model_id, artifacts)
 

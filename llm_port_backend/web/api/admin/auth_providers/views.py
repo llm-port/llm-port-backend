@@ -47,6 +47,15 @@ router = APIRouter()
 
 _AUTH_API_TIMEOUT = 15.0
 
+_auth_proxy_client: httpx.AsyncClient | None = None
+
+
+def _get_auth_client() -> httpx.AsyncClient:
+    global _auth_proxy_client
+    if _auth_proxy_client is None:
+        _auth_proxy_client = httpx.AsyncClient(timeout=_AUTH_API_TIMEOUT)
+    return _auth_proxy_client
+
 
 def _auth_base() -> str:
     """Return the base URL for the auth module's providers API."""
@@ -54,23 +63,19 @@ def _auth_base() -> str:
 
 
 async def _proxy_get(path: str) -> httpx.Response:
-    async with httpx.AsyncClient(timeout=_AUTH_API_TIMEOUT) as client:
-        return await client.get(f"{_auth_base()}{path}")
+    return await _get_auth_client().get(f"{_auth_base()}{path}")
 
 
 async def _proxy_post(path: str, payload: dict) -> httpx.Response:
-    async with httpx.AsyncClient(timeout=_AUTH_API_TIMEOUT) as client:
-        return await client.post(f"{_auth_base()}{path}", json=payload)
+    return await _get_auth_client().post(f"{_auth_base()}{path}", json=payload)
 
 
 async def _proxy_patch(path: str, payload: dict) -> httpx.Response:
-    async with httpx.AsyncClient(timeout=_AUTH_API_TIMEOUT) as client:
-        return await client.patch(f"{_auth_base()}{path}", json=payload)
+    return await _get_auth_client().patch(f"{_auth_base()}{path}", json=payload)
 
 
 async def _proxy_delete(path: str) -> httpx.Response:
-    async with httpx.AsyncClient(timeout=_AUTH_API_TIMEOUT) as client:
-        return await client.delete(f"{_auth_base()}{path}")
+    return await _get_auth_client().delete(f"{_auth_base()}{path}")
 
 
 def _forward_or_raise(resp: httpx.Response):

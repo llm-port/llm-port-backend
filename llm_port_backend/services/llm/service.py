@@ -6,6 +6,7 @@ service to implement the full LLM management workflow.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from pathlib import Path
@@ -202,7 +203,7 @@ class LLMService:
             tags=tags,
             status=ModelStatus.AVAILABLE,
         )
-        artifacts = scan_model_directory(path)
+        artifacts = await asyncio.to_thread(scan_model_directory, path)
         if artifacts:
             await artifact_dao.create_batch(model.id, artifacts)
         return model
@@ -279,7 +280,7 @@ class LLMService:
                     tags=["local"],
                     status=ModelStatus.AVAILABLE,
                 )
-                artifacts = scan_model_directory(str(snapshot_path))
+                artifacts = await asyncio.to_thread(scan_model_directory, str(snapshot_path))
                 if artifacts:
                     await artifact_dao.create_batch(model.id, artifacts)
 

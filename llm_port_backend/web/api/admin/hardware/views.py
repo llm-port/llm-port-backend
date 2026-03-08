@@ -7,6 +7,7 @@ the recommended vLLM image tag, and a list of available image presets
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Annotated, Any
@@ -136,8 +137,8 @@ async def hardware_info(
     of available image presets (built-in + custom).
     """
 
-    inventory = detect_gpus()
-    metrics = collect_gpu_metrics()
+    inventory = await asyncio.to_thread(detect_gpus)
+    metrics = await asyncio.to_thread(collect_gpu_metrics)
 
     gpu_devices = [
         GpuDeviceDTO(
@@ -201,5 +202,5 @@ async def hardware_rescan(
     Useful after enabling a discrete GPU from power-saving mode,
     installing new GPU drivers, or plugging in an eGPU.
     """
-    redetect_gpus()
+    await asyncio.to_thread(redetect_gpus)
     return await hardware_info(_user)

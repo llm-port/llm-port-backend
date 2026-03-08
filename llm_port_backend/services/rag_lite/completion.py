@@ -27,11 +27,13 @@ class CompletionClient:
         model: str,
         api_key: str | None = None,
         timeout: float = 120.0,
+        http_client: httpx.AsyncClient | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key
         self.timeout = timeout
+        self._shared_client = http_client
 
     # ------------------------------------------------------------------
     # Public API
@@ -46,14 +48,22 @@ class CompletionClient:
             "temperature": 0.3,
             "stream": False,
         }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(
+        if self._shared_client:
+            resp = await self._shared_client.post(
                 f"{self.base_url}/chat/completions",
                 json=payload,
                 headers=self._headers(),
+                timeout=self.timeout,
             )
-            resp.raise_for_status()
-            data = resp.json()
+        else:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    json=payload,
+                    headers=self._headers(),
+                )
+        resp.raise_for_status()
+        data = resp.json()
 
         choices = data.get("choices", [])
         if not choices:

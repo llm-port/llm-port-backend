@@ -282,7 +282,7 @@ async def overview(
     cpu_users = sorted(cpu_users, key=lambda item: item.value, reverse=True)[:5]
     memory_users = sorted(memory_users, key=lambda item: item.value, reverse=True)[:5]
 
-    host = _collect_host_snapshot()
+    host = await asyncio.to_thread(_collect_host_snapshot)
     load_1, load_5, load_15 = host["load"]
 
     cpu_percent = host["cpu_percent"]

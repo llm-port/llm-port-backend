@@ -168,6 +168,16 @@ def _normalize_query_range(payload: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+_loki_client: httpx.AsyncClient | None = None
+
+
+def _get_loki_client() -> httpx.AsyncClient:
+    global _loki_client
+    if _loki_client is None:
+        _loki_client = httpx.AsyncClient(timeout=15.0)
+    return _loki_client
+
+
 async def _request_loki_json(
     path: str,
     params: dict[str, str] | None = None,
@@ -175,8 +185,7 @@ async def _request_loki_json(
 ) -> dict[str, Any]:
     url = _loki_http_url(path)
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.get(url, params=params)
+        response = await _get_loki_client().get(url, params=params, timeout=timeout)
     except httpx.TimeoutException as exc:
         raise LokiUpstreamError("Loki request timed out.") from exc
     except httpx.HTTPError as exc:
