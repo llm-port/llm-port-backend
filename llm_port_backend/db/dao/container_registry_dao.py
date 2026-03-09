@@ -3,7 +3,7 @@
 import uuid
 
 from fastapi import Depends
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from llm_port_backend.db.dependencies import get_db_session
@@ -30,26 +30,38 @@ class ContainerRegistryDAO:
         engine_id: str = "local",
         created_by: uuid.UUID | None = None,
     ) -> ContainerRegistry:
-        """Insert or update a container record."""
-        existing = await self.get(container_id)
-        if existing:
-            existing.name = name
-            existing.container_class = container_class
-            existing.owner_scope = owner_scope
-            existing.policy = policy
-            existing.engine_id = engine_id
-            return existing
-        record = ContainerRegistry(
-            container_id=container_id,
-            name=name,
-            container_class=container_class,
-            owner_scope=owner_scope,
-            policy=policy,
-            engine_id=engine_id,
-            created_by=created_by,
+        """Insert or update a container record (atomic).
+
+        Uses a raw ``INSERT … ON CONFLICT DO UPDATE`` to avoid the
+        TOCTOU race inherent in SELECT-then-INSERT *and* the
+        ``MissingGreenlet`` issue that ``pg_insert()`` triggers with
+        asyncpg when enum columns are involved.
+        """
+        await self.session.execute(
+            text(
+                "INSERT INTO container_registry"
+                " (container_id, name, container_class, owner_scope,"
+                "  policy, engine_id, created_by)"
+                " VALUES (:cid, :name, :cls::container_class,"
+                "         :scope, :pol::container_policy, :eng, :by)"
+                " ON CONFLICT (container_id) DO UPDATE SET"
+                "   name = EXCLUDED.name,"
+                "   container_class = EXCLUDED.container_class,"
+                "   owner_scope = EXCLUDED.owner_scope,"
+                "   policy = EXCLUDED.policy,"
+                "   engine_id = EXCLUDED.engine_id"
+            ),
+            {
+                "cid": container_id,
+                "name": name,
+                "cls": container_class.value,
+                "scope": owner_scope,
+                "pol": policy.value,
+                "eng": engine_id,
+                "by": created_by,
+            },
         )
-        self.session.add(record)
-        return record
+        return await self.get(container_id)  # type: ignore[return-value]
 
     async def get(self, container_id: str) -> ContainerRegistry | None:
         """Fetch a registry entry by container ID."""

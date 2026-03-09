@@ -397,6 +397,57 @@ def _init_rag_lite(app: FastAPI) -> None:
     )
 
 
+async def _recover_orphaned_downloads(app: FastAPI) -> None:
+    """Mark downloads that were interrupted by a prior crash as FAILED.
+
+    On startup, any ``download_jobs`` still in QUEUED/RUNNING and any
+    ``llm_models`` still in DOWNLOADING are orphans from a previous
+    process that died mid-download.  Mark them FAILED so the UI shows
+    the correct state and the user can retry.
+    """
+    from sqlalchemy import update  # noqa: PLC0415
+
+    from llm_port_backend.db.models.llm import (  # noqa: PLC0415
+        DownloadJob,
+        DownloadJobStatus,
+        LLMModel,
+        ModelStatus,
+    )
+
+    async with app.state.db_session_factory() as session:
+        try:
+            result_jobs = await session.execute(
+                update(DownloadJob)
+                .where(
+                    DownloadJob.status.in_([
+                        DownloadJobStatus.QUEUED,
+                        DownloadJobStatus.RUNNING,
+                    ]),
+                )
+                .values(
+                    status=DownloadJobStatus.FAILED,
+                    error_message="Interrupted by server restart. Use retry to resume.",
+                ),
+            )
+            result_models = await session.execute(
+                update(LLMModel)
+                .where(LLMModel.status == ModelStatus.DOWNLOADING)
+                .values(status=ModelStatus.FAILED),
+            )
+            await session.commit()
+            jobs_fixed = result_jobs.rowcount
+            models_fixed = result_models.rowcount
+            if jobs_fixed or models_fixed:
+                log.warning(
+                    "Recovered %d orphaned download job(s) and %d model(s) from prior crash.",
+                    jobs_fixed,
+                    models_fixed,
+                )
+        except Exception:
+            await session.rollback()
+            log.exception("Failed to recover orphaned downloads.")
+
+
 @asynccontextmanager
 async def lifespan_setup(
     app: FastAPI,
@@ -451,6 +502,9 @@ async def lifespan_setup(
 
     # ── RAG Lite bootstrap ───────────────────────────────────
     _init_rag_lite(app)
+
+    # ── Recover orphaned download jobs from prior crash ──────
+    await _recover_orphaned_downloads(app)
 
     # ── Optional EE plugin bootstrap ─────────────────────────
     if _EE_AVAILABLE:
