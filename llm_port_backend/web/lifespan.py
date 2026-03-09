@@ -288,6 +288,9 @@ async def _load_runtime_settings_from_db(app: FastAPI) -> None:  # pragma: no co
                     )
                     continue
                 value = _extract_setting_value(row["value_json"])
+                # Skip empty/blank strings so the code-level default is preserved.
+                if isinstance(value, str) and not value.strip():
+                    continue
                 object.__setattr__(settings, attr_name, value)
         except Exception:
             log.exception("Failed to load runtime value settings from DB.")

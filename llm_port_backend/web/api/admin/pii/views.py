@@ -1,4 +1,5 @@
-"""Admin PII dashboard — proxies stats/events from the PII micro-service.
+"""Admin PII dashboard — serves stats/events from the backend DB
+and proxies config options from the PII micro-service.
 
 Requires the PII module to be enabled (``pii_enabled`` setting).
 """
@@ -15,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from starlette import status
 
+from llm_port_backend.db.dao.pii_event_dao import PIIEventDAO
 from llm_port_backend.db.dao.system_settings_dao import SystemSettingsDAO
 from llm_port_backend.db.models.users import User
 from llm_port_backend.settings import settings
@@ -38,7 +40,10 @@ _PII_BASE: str = ""
 
 def _pii_url() -> str:
     """Return the PII service base URL from settings."""
-    return settings.pii_service_url.rstrip("/")
+    url = settings.pii_service_url.strip().rstrip("/")
+    if url and not url.startswith(("http://", "https://")):
+        url = f"http://{url}"
+    return url
 
 
 def _normalize_setting_value(value_json: Any) -> Any:
@@ -296,35 +301,11 @@ async def clear_tenant_policy(
 async def get_pii_stats(
     since: datetime | None = Query(default=None),
     until: datetime | None = Query(default=None),
+    dao: PIIEventDAO = Depends(),
     _user: Annotated[User, Depends(require_superuser)] = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
-    """Proxy PII processing statistics from the PII service."""
-    params: dict[str, str] = {}
-    if since:
-        params["since"] = since.isoformat()
-    if until:
-        params["until"] = until.isoformat()
-
-    try:
-        resp = await _get_pii_client().get(
-            f"{_pii_url()}/v1/pii/stats",
-            params=params,
-            timeout=10.0,
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except httpx.HTTPStatusError as exc:
-        logger.warning("PII stats request failed: %s", exc)
-        raise HTTPException(
-            status_code=exc.response.status_code,
-            detail="PII service returned an error.",
-        ) from exc
-    except Exception as exc:
-        logger.exception("Failed to reach PII service for stats")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="PII service unreachable.",
-        ) from exc
+    """Return aggregate PII processing statistics from the backend DB."""
+    return await dao.get_stats(since=since, until=until)
 
 
 @router.get("/events", name="pii_events")
@@ -335,39 +316,81 @@ async def list_pii_events(
     since: datetime | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    dao: PIIEventDAO = Depends(),
     _user: Annotated[User, Depends(require_superuser)] = None,  # type: ignore[assignment]
 ) -> dict[str, Any]:
-    """Proxy paginated PII events from the PII service."""
-    params: dict[str, Any] = {
-        "limit": limit,
-        "offset": offset,
+    """Return paginated PII scan events from the backend DB."""
+    items = await dao.list_events(
+        operation=operation,
+        source=source,
+        pii_only=pii_only,
+        since=since,
+        limit=limit,
+        offset=offset,
+    )
+    total = await dao.count_events(
+        operation=operation,
+        source=source,
+        pii_only=pii_only,
+        since=since,
+    )
+    return {
+        "items": [
+            {
+                "id": str(e.id),
+                "created_at": e.created_at.isoformat() if e.created_at else "",
+                "operation": e.operation,
+                "mode": e.mode,
+                "language": e.language,
+                "score_threshold": e.score_threshold,
+                "pii_detected": e.pii_detected,
+                "entities_found": e.entities_found,
+                "entity_type_counts": e.entity_type_counts,
+                "source": e.source,
+                "request_id": e.request_id,
+            }
+            for e in items
+        ],
+        "total": total,
     }
-    if operation:
-        params["operation"] = operation
-    if source:
-        params["source"] = source
-    if pii_only:
-        params["pii_only"] = "true"
-    if since:
-        params["since"] = since.isoformat()
 
-    try:
-        resp = await _get_pii_client().get(
-            f"{_pii_url()}/v1/pii/events",
-            params=params,
-            timeout=10.0,
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except httpx.HTTPStatusError as exc:
-        logger.warning("PII events request failed: %s", exc)
-        raise HTTPException(
-            status_code=exc.response.status_code,
-            detail="PII service returned an error.",
-        ) from exc
-    except Exception as exc:
-        logger.exception("Failed to reach PII service for events")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="PII service unreachable.",
-        ) from exc
+
+# ── Internal event-log ingestion endpoint ────────────────────────
+
+
+class PIIEventLogRequest(BaseModel):
+    """Body accepted by the internal event-log endpoint."""
+
+    operation: str
+    mode: str | None = None
+    language: str = "en"
+    score_threshold: float = 0.6
+    pii_detected: bool = False
+    entities_found: int = 0
+    entity_type_counts: dict[str, int] | None = None
+    source: str = "api"
+    request_id: str | None = None
+
+
+@router.post("/events/log", name="pii_event_log")
+async def log_pii_event(
+    body: PIIEventLogRequest,
+    dao: PIIEventDAO = Depends(),
+) -> dict[str, str]:
+    """Accept a PII scan event from the PII service or gateway.
+
+    This is an **internal** endpoint — no superuser check so that the
+    PII micro-service can call it without user credentials.
+    """
+    event = await dao.log_event(
+        operation=body.operation,
+        mode=body.mode,
+        language=body.language,
+        score_threshold=body.score_threshold,
+        pii_detected=body.pii_detected,
+        entities_found=body.entities_found,
+        entity_type_counts=body.entity_type_counts,
+        source=body.source,
+        request_id=body.request_id,
+    )
+    return {"id": str(event.id)}
