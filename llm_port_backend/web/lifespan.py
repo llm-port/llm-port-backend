@@ -528,10 +528,13 @@ async def lifespan_setup(
 
     app.middleware_stack = app.build_middleware_stack()
 
+    # Seed built-in RBAC roles and permissions on every startup (idempotent).
+    await _seed_rbac(app)
+
     # Seed a default admin user in dev mode so the UI is usable immediately
     if settings.environment == "dev":
         await _seed_dev_user(app)
-        await _seed_rbac(app)
+        await _assign_dev_admin_role(app)
 
     yield
 
@@ -674,7 +677,18 @@ async def _seed_dev_user(app: FastAPI) -> None:
 
 
 async def _seed_rbac(app: FastAPI) -> None:
-    """Seed default RBAC roles, permissions, and assign admin role to dev user."""
+    """Seed built-in RBAC roles and permissions (idempotent)."""
+    from llm_port_backend.db.dao.rbac_dao import RbacDAO  # noqa: PLC0415
+
+    async with app.state.db_session_factory() as session:
+        rbac_dao = RbacDAO(session)
+        await rbac_dao.seed_defaults()
+        await session.commit()
+        log.info("Seeded RBAC roles and permissions")
+
+
+async def _assign_dev_admin_role(app: FastAPI) -> None:
+    """Assign the admin role to the dev user (dev mode only)."""
     from sqlalchemy import select  # noqa: PLC0415
 
     from llm_port_backend.db.dao.rbac_dao import RbacDAO  # noqa: PLC0415
@@ -682,9 +696,6 @@ async def _seed_rbac(app: FastAPI) -> None:
 
     async with app.state.db_session_factory() as session:
         rbac_dao = RbacDAO(session)
-        await rbac_dao.seed_defaults()
-
-        # Assign admin role to the dev user
         result = await session.execute(
             select(User).where(User.email == "admin@localhost"),  # type: ignore[arg-type]
         )
@@ -693,6 +704,4 @@ async def _seed_rbac(app: FastAPI) -> None:
             admin_role = await rbac_dao.get_role_by_name("admin")
             if admin_role:
                 await rbac_dao.assign_role(dev_user.id, admin_role.id)
-
-        await session.commit()
-        log.info("Seeded RBAC roles and permissions")
+                await session.commit()

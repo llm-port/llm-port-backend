@@ -17,6 +17,7 @@ from llm_port_backend.web.api.admin.dependencies import (
     get_docker,
     require_superuser,
 )
+from llm_port_backend.web.api.rbac import require_permission
 from llm_port_backend.web.api.admin.networks.schema import (
     CreateNetworkRequest,
     NetworkContainerDTO,
@@ -126,7 +127,7 @@ def _summary_from_raw(raw: dict[str, Any], *, full: bool = False) -> dict[str, A
 @router.get("/", response_model=list[NetworkSummaryDTO], name="list_networks")
 async def list_networks(
     docker: DockerService = Depends(get_docker),
-    _user: User = Depends(require_superuser),
+    _user: User = Depends(require_permission("networks", "read")),
 ) -> list[NetworkSummaryDTO]:
     """List all Docker networks with summary info."""
     raw_nets = await docker.list_networks()
@@ -148,7 +149,7 @@ async def list_networks(
 async def get_network(
     network_id: str,
     docker: DockerService = Depends(get_docker),
-    _user: User = Depends(require_superuser),
+    _user: User = Depends(require_permission("networks", "read")),
 ) -> NetworkDetailDTO:
     """Return full details for a single network."""
     try:
@@ -164,7 +165,7 @@ async def get_network(
 @router.post("/", response_model=NetworkDetailDTO, status_code=status.HTTP_201_CREATED, name="create_network")
 async def create_network(
     body: CreateNetworkRequest,
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("networks", "create")),
     docker: DockerService = Depends(get_docker),
     audit_dao: AuditDAO = Depends(),
 ) -> NetworkDetailDTO:
@@ -209,7 +210,7 @@ async def create_network(
 )
 async def delete_network(
     network_id: str,
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("networks", "delete")),
     docker: DockerService = Depends(get_docker),
     audit_dao: AuditDAO = Depends(),
 ) -> None:

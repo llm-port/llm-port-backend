@@ -22,7 +22,7 @@ _DEFAULT_ROLES: dict[str, dict[str, list[str]]] = {
         "llm.providers": ["create", "read", "update", "delete"],
         "llm.models": ["create", "read", "update", "delete", "download"],
         "llm.runtimes": ["create", "read", "update", "delete", "start", "stop", "restart"],
-        "llm.jobs": ["read", "cancel"],
+        "llm.jobs": ["read", "cancel", "create"],
         "llm.settings": ["read", "update"],
         "llm.graph": ["read"],
         "containers": [
@@ -53,7 +53,8 @@ _DEFAULT_ROLES: dict[str, dict[str, list[str]]] = {
         "rag.assets": ["create", "read", "update", "delete"],
         "rag.publish": ["execute", "read"],
         "rag.jobs": ["read"],
-        "rag.search": ["read"],
+        "rag.search": ["read", "write"],
+        "modules": ["manage", "read"],
     },
     "operator": {
         "llm.providers": ["read"],
@@ -80,6 +81,7 @@ _DEFAULT_ROLES: dict[str, dict[str, list[str]]] = {
         "rag.publish": ["execute", "read"],
         "rag.jobs": ["read"],
         "rag.search": ["read"],
+        "modules": ["read"],
     },
     "viewer": {
         "llm.providers": ["read"],
@@ -113,7 +115,7 @@ _DEFAULT_ROLES: dict[str, dict[str, list[str]]] = {
         "rag.assets": ["create", "read", "update", "delete"],
         "rag.publish": ["execute", "read"],
         "rag.jobs": ["read"],
-        "rag.search": ["read"],
+        "rag.search": ["read", "write"],
     },
     "rag_editor": {
         "rag.runtime": ["read"],
@@ -121,7 +123,7 @@ _DEFAULT_ROLES: dict[str, dict[str, list[str]]] = {
         "rag.assets": ["create", "read", "update", "delete"],
         "rag.publish": ["execute", "read"],
         "rag.jobs": ["read"],
-        "rag.search": ["read"],
+        "rag.search": ["read", "write"],
     },
     "rag_viewer": {
         "rag.runtime": ["read"],

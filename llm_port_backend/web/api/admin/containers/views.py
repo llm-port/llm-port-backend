@@ -35,6 +35,7 @@ from llm_port_backend.web.api.admin.dependencies import (
     get_root_mode_active,
     require_superuser,
 )
+from llm_port_backend.web.api.rbac import require_permission
 
 router = APIRouter()
 
@@ -132,7 +133,7 @@ def _container_summary_from_docker(
 @router.post("/", response_model=ContainerSummaryDTO, status_code=201, name="create_container")
 async def create_container(
     body: CreateContainerRequest,
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("containers", "create")),
     docker: DockerService = Depends(get_docker),
     registry_dao: ContainerRegistryDAO = Depends(),
     audit_dao: AuditDAO = Depends(),
@@ -195,7 +196,7 @@ async def list_containers(
     filter_class: ContainerClass | None = Query(default=None, alias="class"),
     docker: DockerService = Depends(get_docker),
     registry_dao: ContainerRegistryDAO = Depends(),
-    _user: User = Depends(require_superuser),
+    _user: User = Depends(require_permission("containers", "read")),
 ) -> list[ContainerSummaryDTO]:
     """
     Return all containers visible on the connected engine.
@@ -240,7 +241,7 @@ async def get_container(
     container_id: str,
     docker: DockerService = Depends(get_docker),
     entry: Any = Depends(get_registry_entry),
-    _user: User = Depends(require_superuser),
+    _user: User = Depends(require_permission("containers", "read")),
     enforcer: PolicyEnforcer = Depends(get_policy_enforcer),
     root_mode: bool = Depends(get_root_mode_active),
 ) -> ContainerDetailDTO:
@@ -283,7 +284,7 @@ async def get_container(
 async def container_lifecycle(
     container_id: str,
     action: str,
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("containers", "start")),
     docker: DockerService = Depends(get_docker),
     entry: Any = Depends(get_registry_entry),
     enforcer: PolicyEnforcer = Depends(get_policy_enforcer),
@@ -344,7 +345,7 @@ async def container_logs(
     container_id: str,
     tail: int = Query(default=100, ge=1, le=10000),
     follow: bool = Query(default=False),
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("containers", "logs")),
     docker: DockerService = Depends(get_docker),
     entry: Any = Depends(get_registry_entry),
     enforcer: PolicyEnforcer = Depends(get_policy_enforcer),
@@ -379,7 +380,7 @@ async def container_logs(
 async def container_exec(
     container_id: str,
     body: ExecTokenRequest,
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("containers", "exec")),
     docker: DockerService = Depends(get_docker),
     entry: Any = Depends(get_registry_entry),
     enforcer: PolicyEnforcer = Depends(get_policy_enforcer),
@@ -429,7 +430,7 @@ async def container_exec(
 async def delete_container(
     container_id: str,
     force: bool = Query(default=False),
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("containers", "delete")),
     docker: DockerService = Depends(get_docker),
     entry: Any = Depends(get_registry_entry),
     enforcer: PolicyEnforcer = Depends(get_policy_enforcer),
@@ -470,7 +471,7 @@ async def delete_container(
 async def register_container(
     container_id: str,
     body: RegisterContainerRequest,
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("containers", "update")),
     docker: DockerService = Depends(get_docker),
     registry_dao: ContainerRegistryDAO = Depends(),
     audit_dao: AuditDAO = Depends(),

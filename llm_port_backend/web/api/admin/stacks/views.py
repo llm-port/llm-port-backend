@@ -22,6 +22,7 @@ from llm_port_backend.web.api.admin.dependencies import (
     get_root_mode_active,
     require_superuser,
 )
+from llm_port_backend.web.api.rbac import require_permission
 from llm_port_backend.web.api.admin.stacks.schema import (
     DeployStackRequest,
     RollbackStackRequest,
@@ -36,7 +37,7 @@ router = APIRouter()
 @router.get("/", response_model=list[StackSummaryDTO], name="list_stacks")
 async def list_stacks(
     stacks_dao: StackRevisionDAO = Depends(),
-    _user: User = Depends(require_superuser),
+    _user: User = Depends(require_permission("stacks", "read")),
 ) -> list[StackSummaryDTO]:
     """Return all known stacks with their latest revision."""
     stack_ids = await stacks_dao.list_stacks()
@@ -57,7 +58,7 @@ async def list_stacks(
 @router.post("/deploy", response_model=StackRevisionDTO, name="deploy_stack")
 async def deploy_stack(
     body: DeployStackRequest,
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("stacks", "deploy")),
     stacks_dao: StackRevisionDAO = Depends(),
     enforcer: PolicyEnforcer = Depends(get_policy_enforcer),
     root_mode: bool = Depends(get_root_mode_active),
@@ -92,7 +93,7 @@ async def deploy_stack(
 async def update_stack(
     stack_id: str,
     body: DeployStackRequest,
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("stacks", "update")),
     stacks_dao: StackRevisionDAO = Depends(),
     enforcer: PolicyEnforcer = Depends(get_policy_enforcer),
     root_mode: bool = Depends(get_root_mode_active),
@@ -132,7 +133,7 @@ async def update_stack(
 async def rollback_stack(
     stack_id: str,
     body: RollbackStackRequest,
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("stacks", "rollback")),
     stacks_dao: StackRevisionDAO = Depends(),
     enforcer: PolicyEnforcer = Depends(get_policy_enforcer),
     root_mode: bool = Depends(get_root_mode_active),
@@ -174,7 +175,7 @@ async def rollback_stack(
 async def list_stack_revisions(
     stack_id: str,
     stacks_dao: StackRevisionDAO = Depends(),
-    _user: User = Depends(require_superuser),
+    _user: User = Depends(require_permission("stacks", "read")),
 ) -> list[StackRevisionDTO]:
     """List all revisions for a stack, newest first."""
     revisions = await stacks_dao.list_revisions(stack_id)
@@ -187,7 +188,7 @@ async def stack_diff(
     from_rev: int = Query(..., description="Source revision number."),
     to_rev: int = Query(..., description="Target revision number."),
     stacks_dao: StackRevisionDAO = Depends(),
-    _user: User = Depends(require_superuser),
+    _user: User = Depends(require_permission("stacks", "read")),
 ) -> StackDiffDTO:
     """Return a side-by-side diff between two stack revisions."""
     rev_from = await stacks_dao.get_revision(stack_id, from_rev)

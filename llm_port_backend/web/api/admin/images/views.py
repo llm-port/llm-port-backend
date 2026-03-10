@@ -24,6 +24,7 @@ from llm_port_backend.web.api.admin.dependencies import (
     get_root_mode_active,
     require_superuser,
 )
+from llm_port_backend.web.api.rbac import require_permission
 from llm_port_backend.web.api.admin.images.schema import (
     ImageCheckResponse,
     ImageSummaryDTO,
@@ -40,7 +41,7 @@ logger = logging.getLogger(__name__)
 @router.get("/", response_model=list[ImageSummaryDTO], name="list_images")
 async def list_images(
     docker: DockerService = Depends(get_docker),
-    _user: User = Depends(require_superuser),
+    _user: User = Depends(require_permission("images", "read")),
 ) -> list[ImageSummaryDTO]:
     """List all local images."""
     raw_images = await docker.list_images()
@@ -61,7 +62,7 @@ async def check_image(
     image: str,
     tag: str = "latest",
     docker: DockerService = Depends(get_docker),
-    _user: User = Depends(require_superuser),
+    _user: User = Depends(require_permission("images", "read")),
 ) -> ImageCheckResponse:
     """Check whether an image:tag exists locally, and whether a pull is active."""
     needle = f"{image}:{tag}"
@@ -86,7 +87,7 @@ async def check_image(
 @router.post("/pull", response_model=PullStartedResponse, name="pull_image")
 async def pull_image(
     body: PullImageRequest,
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("images", "pull")),
     docker: DockerService = Depends(get_docker),
     enforcer: PolicyEnforcer = Depends(get_policy_enforcer),
     root_mode: bool = Depends(get_root_mode_active),
@@ -134,7 +135,7 @@ async def pull_image(
 @router.get("/pull/{pull_id}/progress", name="pull_progress")
 async def pull_progress(
     pull_id: str,
-    _user: User = Depends(require_superuser),
+    _user: User = Depends(require_permission("images", "read")),
 ) -> StreamingResponse:
     """Stream pull progress as Server-Sent Events.
 
@@ -172,7 +173,7 @@ async def pull_progress(
 @router.post("/prune", response_model=PruneReport, name="prune_images")
 async def prune_images(
     body: PruneImagesRequest,
-    user: User = Depends(require_superuser),
+    user: User = Depends(require_permission("images", "prune")),
     docker: DockerService = Depends(get_docker),
     enforcer: PolicyEnforcer = Depends(get_policy_enforcer),
     root_mode: bool = Depends(get_root_mode_active),

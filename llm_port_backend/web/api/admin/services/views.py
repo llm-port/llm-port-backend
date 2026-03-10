@@ -200,6 +200,7 @@ async def _emit_module_lifecycle_alert(
 async def list_services(
     request: Request,
     docker: DockerService = Depends(get_docker),
+    _user: User = Depends(require_permission("modules", "read")),
 ) -> JSONResponse:
     """Return the manifest of optional backend modules.
 
