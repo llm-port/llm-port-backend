@@ -48,30 +48,6 @@ async def _sync_pii_enabled(
     return []
 
 
-async def _sync_mailer_enabled(
-    service: SystemSettingsService,
-    enabled: bool,
-    actor_id: Any,
-) -> list[str]:
-    """Sync ``llm_port_mailer.enabled`` as module lifecycle flag."""
-    try:
-        result = await service.update_value(
-            key="llm_port_mailer.enabled",
-            value=enabled,
-            actor_id=actor_id,
-            root_mode_active=False,
-            target_host="local",
-        )
-    except Exception as exc:
-        logger.exception("Failed to sync llm_port_mailer.enabled")
-        return [f"Failed to sync llm_port_mailer.enabled: {exc}"]
-
-    if result.apply_status != "success":
-        details = "; ".join(result.messages) if result.messages else "unknown apply failure"
-        return [f"Failed to apply llm_port_mailer.enabled={enabled}: {details}"]
-    return []
-
-
 async def _sync_rag_lite_enabled(
     service: SystemSettingsService,
     enabled: bool,
@@ -93,30 +69,6 @@ async def _sync_rag_lite_enabled(
     if result.apply_status != "success":
         details = "; ".join(result.messages) if result.messages else "unknown apply failure"
         return [f"Failed to apply rag_lite.enabled={enabled}: {details}"]
-    return []
-
-
-async def _sync_docling_enabled(
-    service: SystemSettingsService,
-    enabled: bool,
-    actor_id: Any,
-) -> list[str]:
-    """Sync ``llm_port_backend.docling_enabled`` as module lifecycle flag."""
-    try:
-        result = await service.update_value(
-            key="llm_port_backend.docling_enabled",
-            value=enabled,
-            actor_id=actor_id,
-            root_mode_active=False,
-            target_host="local",
-        )
-    except Exception as exc:
-        logger.exception("Failed to sync llm_port_backend.docling_enabled")
-        return [f"Failed to sync llm_port_backend.docling_enabled: {exc}"]
-
-    if result.apply_status != "success":
-        details = "; ".join(result.messages) if result.messages else "unknown apply failure"
-        return [f"Failed to apply llm_port_backend.docling_enabled={enabled}: {details}"]
     return []
 
 
@@ -182,29 +134,6 @@ def register_core_modules() -> None:
             on_disable=_sync_rag_lite_enabled,
         ),
         ModuleDef(
-            name="rag",
-            display_name="RAG Engine",
-            description=(
-                "Retrieval-Augmented Generation pipeline with document ingestion, "
-                "chunking, embedding, and vector search."
-            ),
-            module_type="container",
-            settings_flag="rag_enabled",
-            health_url_fn=lambda: f"{settings.rag_base_url}/health",
-            compose_profile="rag",
-            compose_services=[
-                "llm-port-rag",
-                "llm-port-rag-worker",
-                "llm-port-rag-scheduler",
-                "llm-port-rag-migrator",
-            ],
-            container_names=[
-                "llm-port-rag",
-                "llm-port-rag-worker",
-                "llm-port-rag-scheduler",
-            ],
-        ),
-        ModuleDef(
             name="pii",
             display_name="PII Guard",
             description=(
@@ -226,64 +155,6 @@ def register_core_modules() -> None:
             ],
             on_enable=_sync_pii_enabled,
             on_disable=_sync_pii_enabled,
-        ),
-        ModuleDef(
-            name="mailer",
-            display_name="Mailer",
-            description=(
-                "SMTP mail adapter used for password reset and system admin alerts."
-            ),
-            module_type="container",
-            settings_flag="mailer_enabled",
-            health_url_fn=lambda: f"{settings.mailer_service_url.rstrip('/')}/api/health",
-            compose_profile="mailer",
-            compose_services=[
-                "llm-port-mailer",
-            ],
-            container_names=[
-                "llm-port-mailer",
-            ],
-            on_enable=_sync_mailer_enabled,
-            on_disable=_sync_mailer_enabled,
-        ),
-        ModuleDef(
-            name="auth",
-            display_name="External Auth",
-            description=(
-                "Enterprise SSO module providing OIDC and OAuth2 external "
-                "authentication provider management."
-            ),
-            module_type="container",
-            settings_flag="auth_enabled",
-            health_url_fn=lambda: f"{settings.auth_service_url.rstrip('/')}/api/providers/health",
-            compose_profile="auth",
-            compose_services=[
-                "llm-port-auth",
-            ],
-            container_names=[
-                "llm-port-auth",
-            ],
-        ),
-        ModuleDef(
-            name="docling",
-            display_name="Document Processor",
-            description=(
-                "Stateless document conversion service powered by IBM Docling. "
-                "Provides layout-aware PDF/DOCX parsing, OCR, table extraction, "
-                "and hierarchical chunking for RAG pipelines."
-            ),
-            module_type="container",
-            settings_flag="docling_enabled",
-            health_url_fn=lambda: f"{settings.docling_service_url.rstrip('/')}/api/v1/health",
-            compose_profile="docling",
-            compose_services=[
-                "llm-port-docling",
-            ],
-            container_names=[
-                "llm-port-docling",
-            ],
-            on_enable=_sync_docling_enabled,
-            on_disable=_sync_docling_enabled,
         ),
     ]
 
