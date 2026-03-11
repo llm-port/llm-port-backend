@@ -37,7 +37,7 @@ SETTINGS_REGISTRY: tuple[SettingDefinition, ...] = (
         label="Endpoint URL",
         description="Swagger/OpenAPI URL for llm_port_api docs.",
         is_secret=False,
-        default="http://localhost:8001/api/docs",
+        default="/gateway-docs/docs",
         apply_scope=SystemApplyScope.LIVE_RELOAD,
         service_targets=(),
     ),

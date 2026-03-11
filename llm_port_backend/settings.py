@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     # Current environment
     environment: str = "dev"
 
+    # Set to False when running behind HTTP (no TLS termination).
+    cookie_secure: bool = True
+
     log_level: LogLevel = LogLevel.INFO
     users_secret: str = os.getenv("USERS_SECRET", "")
 

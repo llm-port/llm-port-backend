@@ -130,7 +130,7 @@ auth_jwt = AuthenticationBackend(
 )
 cookie_transport = CookieTransport(
     cookie_name="fapiauth",
-    cookie_secure=settings.environment != "dev",
+    cookie_secure=settings.cookie_secure,
 )
 auth_cookie = AuthenticationBackend(name="cookie", transport=cookie_transport, get_strategy=get_jwt_strategy)
 

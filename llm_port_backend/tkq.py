@@ -10,6 +10,7 @@ broker: AsyncBroker = AioPikaBroker(
     # Each worker prefetches only 1 message at a time so that if the worker
     # crashes, only 1 message is returned to the queue for redelivery.
     qos=1,
+    declare_exchange_kwargs={"durable": True},
 )
 
 if settings.environment.lower() == "pytest":
