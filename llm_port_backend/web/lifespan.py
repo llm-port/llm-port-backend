@@ -469,8 +469,23 @@ async def lifespan_setup(
 
     register_core_modules()
 
+    # Connect to RabbitMQ with retries — RMQ may still be starting.
     if not broker.is_worker_process:
-        await broker.startup()
+        import asyncio
+
+        for attempt in range(1, 13):
+            try:
+                await broker.startup()
+                break
+            except Exception:
+                if attempt == 12:
+                    raise
+                log.warning(
+                    "RabbitMQ not ready (attempt %d/12). Retrying in 5 s…",
+                    attempt,
+                )
+                await asyncio.sleep(5)
+
     _setup_db(app)
     await _ensure_api_secret_read_grants(app)
 
