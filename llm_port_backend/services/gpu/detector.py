@@ -8,6 +8,12 @@ even on multi-vendor laptops (e.g. AMD iGPU + NVIDIA dGPU):
 3. **Windows WMI / registry** — any GPU on Windows 10+.
 4. **macOS system_profiler** — Apple GPUs on macOS.
 5. **Intel sysfs** — Intel GPUs on Linux.
+6. **Docker daemon** — containerised fallback.  When the backend runs
+   inside a Docker container the host GPUs are not directly visible.
+   This strategy queries the Docker daemon (via the bind-mounted
+   ``/var/run/docker.sock``) for registered GPU runtimes (e.g. the
+   NVIDIA Container Toolkit) so ``has_gpu`` returns ``True`` and the
+   correct vLLM image is selected.
 
 Results from all applicable strategies are merged and de-duplicated so
 that a laptop with an AMD iGPU and an NVIDIA dGPU correctly reports
@@ -79,6 +85,14 @@ def detect_gpus() -> GpuInventory:
     if sys.platform == "linux":
         intel_devices = _detect_intel_linux()
         devices.extend(intel_devices)
+
+    # Strategy 6: Docker daemon (containerised fallback)
+    # When running inside a container, host GPUs aren't directly
+    # visible.  Query the Docker daemon (via the bind-mounted socket)
+    # for registered GPU runtimes.
+    if not devices:
+        docker_devices = _detect_via_docker()
+        devices.extend(docker_devices)
 
     if not devices:
         logger.info("No GPUs detected on this host")
@@ -487,6 +501,186 @@ def _detect_intel_linux() -> list[GpuDevice]:
 
     if devices:
         logger.info("Detected %d Intel GPU(s) via Linux sysfs", len(devices))
+    return devices
+
+
+# ── Strategy 6: Docker daemon (containerised fallback) ────────────────
+
+
+def _detect_via_docker() -> list[GpuDevice]:
+    """Detect host GPUs by running an ``nvidia-smi`` probe container.
+
+    When the backend runs inside a container, host GPUs are invisible to
+    pynvml/sysfs.  The Docker socket (``/var/run/docker.sock``) is
+    bind-mounted, so we:
+
+    1. Check ``GET /info`` for the ``nvidia`` runtime.
+    2. Create a tiny ``nvidia/cuda:base`` probe container **with GPU
+       passthrough** and run ``nvidia-smi``.
+    3. Parse the output for GPU model names and VRAM.
+    4. If the probe fails (no adapters, no driver) → no GPU reported.
+
+    The nvidia runtime being registered does **not** imply actual NVIDIA
+    hardware is present (the toolkit can be installed on an AMD-only
+    machine), so the probe is the only reliable check.
+    """
+    devices: list[GpuDevice] = []
+    docker_sock = Path("/var/run/docker.sock")
+    if not docker_sock.exists():
+        return devices
+
+    with contextlib.suppress(Exception):
+        import http.client  # noqa: PLC0415
+        import json as _json  # noqa: PLC0415
+        import socket as _socket  # noqa: PLC0415
+        import time as _time  # noqa: PLC0415
+        import urllib.parse as _url  # noqa: PLC0415
+
+        class _UnixConn(http.client.HTTPConnection):
+            """HTTP connection over a Unix domain socket."""
+
+            def __init__(self, sock_path: str) -> None:
+                super().__init__("localhost", timeout=10)
+                self._sock_path = sock_path
+
+            def connect(self) -> None:
+                self.sock = _socket.socket(
+                    _socket.AF_UNIX, _socket.SOCK_STREAM,
+                )
+                self.sock.settimeout(self.timeout)
+                self.sock.connect(self._sock_path)
+
+        sock_str = str(docker_sock)
+
+        # ── 1. Check nvidia runtime is registered ────────────────────
+        c1 = _UnixConn(sock_str)
+        c1.request("GET", "/info")
+        r1 = c1.getresponse()
+        if r1.status != 200:
+            c1.close()
+            return devices
+        info = _json.loads(r1.read())
+        c1.close()
+
+        runtimes = info.get("Runtimes") or {}
+        if "nvidia" not in runtimes:
+            return devices
+
+        logger.debug("nvidia runtime found — running GPU probe container")
+
+        # ── 2. Create probe container ────────────────────────────────
+        # Use a slim CUDA base image that ships nvidia-smi.
+        # The image must already be pulled; we don't pull here to avoid
+        # network delays during startup.
+        probe_image = "nvidia/cuda:12.6.3-base-ubuntu24.04"
+        probe_cmd = [
+            "nvidia-smi",
+            "--query-gpu=name,memory.total",
+            "--format=csv,noheader,nounits",
+        ]
+        create_body = _json.dumps({
+            "Image": probe_image,
+            "Cmd": probe_cmd,
+            "HostConfig": {
+                "DeviceRequests": [{
+                    "Driver": "",
+                    "Count": -1,  # all GPUs
+                    "Capabilities": [["gpu"]],
+                }],
+            },
+        })
+
+        c2 = _UnixConn(sock_str)
+        c2.request(
+            "POST", "/containers/create?name=llm-port-gpu-probe",
+            body=create_body,
+            headers={"Content-Type": "application/json"},
+        )
+        r2 = c2.getresponse()
+        r2_body = _json.loads(r2.read())
+        c2.close()
+
+        if r2.status not in (200, 201):
+            logger.debug("GPU probe container creation failed: %s", r2_body)
+            return devices
+
+        cid = r2_body["Id"]
+
+        # ── 3. Start → wait → read logs → remove ────────────────────
+        try:
+            c3 = _UnixConn(sock_str)
+            c3.request("POST", f"/containers/{cid}/start")
+            r3 = c3.getresponse()
+            r3.read()
+            c3.close()
+
+            if r3.status not in (200, 204):
+                logger.debug("GPU probe container failed to start (rc=%d)", r3.status)
+                return devices
+
+            # Wait for the container (max 10 s)
+            c4 = _UnixConn(sock_str)
+            c4.request("POST", f"/containers/{cid}/wait?condition=not-running")
+            c4.sock.settimeout(15)
+            r4 = c4.getresponse()
+            r4.read()
+            c4.close()
+
+            # Read logs (stdout only)
+            c5 = _UnixConn(sock_str)
+            c5.request("GET", f"/containers/{cid}/logs?stdout=true&stderr=false")
+            r5 = c5.getresponse()
+            raw_logs = r5.read()
+            c5.close()
+
+            # Docker multiplexed stream: 8-byte header per frame.
+            # Strip headers to get plain text.
+            output_parts: list[str] = []
+            pos = 0
+            while pos + 8 <= len(raw_logs):
+                frame_size = int.from_bytes(raw_logs[pos + 4 : pos + 8], "big")
+                frame_data = raw_logs[pos + 8 : pos + 8 + frame_size]
+                output_parts.append(frame_data.decode("utf-8", errors="replace"))
+                pos += 8 + frame_size
+
+            output = "".join(output_parts).strip()
+            if not output:
+                return devices
+
+            # Parse CSV: "NVIDIA GeForce RTX 4090, 24564"
+            for idx, line in enumerate(output.splitlines()):
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) < 2:
+                    continue
+                name = parts[0]
+                vram_mib = 0
+                with contextlib.suppress(ValueError):
+                    vram_mib = int(parts[1])
+                devices.append(
+                    GpuDevice(
+                        index=idx,
+                        vendor=GpuVendor.NVIDIA,
+                        model=name,
+                        vram_bytes=vram_mib * 1024 * 1024,
+                        driver_version="",
+                        compute_api=GpuComputeApi.CUDA,
+                    ),
+                )
+
+            if devices:
+                logger.info(
+                    "Detected %d NVIDIA GPU(s) via Docker probe: %s",
+                    len(devices),
+                    ", ".join(d.model for d in devices),
+                )
+        finally:
+            # Always clean up the probe container
+            with contextlib.suppress(Exception):
+                cx = _UnixConn(sock_str)
+                cx.request("DELETE", f"/containers/{cid}?force=true")
+                cx.getresponse().read()
+                cx.close()
+
     return devices
 
 
